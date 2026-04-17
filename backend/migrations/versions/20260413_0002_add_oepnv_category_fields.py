@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision: str = "20260413_0002"
@@ -18,14 +19,23 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "region_score_snapshot",
-        sa.Column("score_oepnv", sa.Float(), nullable=False, server_default=sa.text("0")),
-    )
-    op.add_column(
-        "user_preference_session",
-        sa.Column("oepnv_weight", sa.Integer(), nullable=False, server_default=sa.text("0")),
-    )
+    bind = op.get_bind()
+    inspector = inspect(bind)
+
+    snapshot_columns = {column["name"] for column in inspector.get_columns("region_score_snapshot")}
+    preference_columns = {column["name"] for column in inspector.get_columns("user_preference_session")}
+
+    if "score_oepnv" not in snapshot_columns:
+        op.add_column(
+            "region_score_snapshot",
+            sa.Column("score_oepnv", sa.Float(), nullable=False, server_default=sa.text("0")),
+        )
+
+    if "oepnv_weight" not in preference_columns:
+        op.add_column(
+            "user_preference_session",
+            sa.Column("oepnv_weight", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        )
 
 
 def downgrade() -> None:

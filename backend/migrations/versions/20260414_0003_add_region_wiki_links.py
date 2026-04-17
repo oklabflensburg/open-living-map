@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision: str = "20260414_0003"
@@ -18,9 +19,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("region", sa.Column("wikidata_id", sa.String(), nullable=True))
-    op.add_column("region", sa.Column("wikidata_url", sa.String(), nullable=True))
-    op.add_column("region", sa.Column("wikipedia_url", sa.String(), nullable=True))
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    region_columns = {column["name"] for column in inspector.get_columns("region")}
+
+    if "wikidata_id" not in region_columns:
+        op.add_column("region", sa.Column("wikidata_id", sa.String(), nullable=True))
+    if "wikidata_url" not in region_columns:
+        op.add_column("region", sa.Column("wikidata_url", sa.String(), nullable=True))
+    if "wikipedia_url" not in region_columns:
+        op.add_column("region", sa.Column("wikipedia_url", sa.String(), nullable=True))
 
 
 def downgrade() -> None:
