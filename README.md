@@ -4,24 +4,48 @@ Wohnortkompass ist ein lokales Monorepo fuer eine Deutschlandkarte mit kommunale
 
 ## Inhalt
 
-- [Ueberblick](#ueberblick)
-- [Projektstruktur](#projektstruktur)
-- [Voraussetzungen](#voraussetzungen)
-- [Lokales Setup](#lokales-setup)
-- [Umgebungsvariablen](#umgebungsvariablen)
-- [Datenquellen und ETL](#datenquellen-und-etl)
-- [API](#api)
-- [Frontend](#frontend)
-- [Datenbank und Persistenz](#datenbank-und-persistenz)
-- [Bekannte Besonderheiten](#bekannte-besonderheiten)
+- [Wohnortkompass](#wohnortkompass)
+  - [Inhalt](#inhalt)
+  - [Ueberblick](#ueberblick)
+  - [Projektstruktur](#projektstruktur)
+  - [Voraussetzungen](#voraussetzungen)
+  - [Lokales Setup](#lokales-setup)
+    - [1. Datenbank starten](#1-datenbank-starten)
+    - [2. Backend einrichten](#2-backend-einrichten)
+    - [3. Frontend einrichten](#3-frontend-einrichten)
+  - [Umgebungsvariablen](#umgebungsvariablen)
+    - [Backend](#backend)
+    - [Frontend](#frontend)
+  - [Datenquellen und ETL](#datenquellen-und-etl)
+    - [BKG VG25](#bkg-vg25)
+    - [Destatis / Regionalstatistik](#destatis--regionalstatistik)
+    - [DWD](#dwd)
+    - [UBA](#uba)
+    - [Unfallatlas](#unfallatlas)
+    - [OSM](#osm)
+  - [Lizenz und Attribution](#lizenz-und-attribution)
+    - [OpenStreetMap](#openstreetmap)
+    - [BKG VG25](#bkg-vg25-1)
+    - [Destatis / Regionalstatistik / GENESIS](#destatis--regionalstatistik--genesis)
+    - [DWD](#dwd-1)
+    - [Umweltbundesamt](#umweltbundesamt)
+    - [Unfallatlas](#unfallatlas-1)
+    - [GTFS-Datenquellen aus OpenData OePNV](#gtfs-datenquellen-aus-opendata-oepnv)
+  - [Praktische Empfehlung fuer das Projekt](#praktische-empfehlung-fuer-das-projekt)
+    - [OePNV](#oepnv)
+  - [API](#api)
+  - [Frontend](#frontend-1)
+  - [Datenbank und Persistenz](#datenbank-und-persistenz)
+  - [Bekannte Besonderheiten](#bekannte-besonderheiten)
+  - [Lizenz und Attribution](#lizenz-und-attribution-1)
 
 ## Ueberblick
 
 Das System besteht aus drei Hauptteilen:
 
-1. `apps/backend`
+1. `backend`
    FastAPI, SQLModel, Alembic und die ETL-Jobs.
-2. `apps/frontend`
+2. `frontend`
    Nuxt 3 mit Kartenansichten, Finder, Vergleich und Regions-Detailseiten.
 3. `infra`
    Lokale PostGIS-Datenbank per Docker Compose.
@@ -31,28 +55,27 @@ Die App arbeitet gemeindescharf, soweit die jeweiligen Quellen das hergeben. Geo
 ## Projektstruktur
 
 ```text
-wohnortkompass/
-├── apps/
-│   ├── backend/
-│   │   ├── app/
-│   │   │   ├── api/
-│   │   │   ├── core/
-│   │   │   ├── etl/
-│   │   │   ├── models/
-│   │   │   ├── repositories/
-│   │   │   ├── schemas/
-│   │   │   └── services/
-│   │   ├── migrations/
-│   │   ├── pyproject.toml
-│   │   └── .env.example
-│   └── frontend/
-│       ├── components/
-│       ├── composables/
-│       ├── pages/
-│       ├── stores/
-│       ├── types/
-│       ├── nuxt.config.ts
-│       └── .env.example
+open-living-map/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── etl/
+│   │   ├── models/
+│   │   ├── repositories/
+│   │   ├── schemas/
+│   │   └── services/
+│   ├── migrations/
+│   ├── pyproject.toml
+│   └── .env.example
+├── frontend/
+│   ├── components/
+│   ├── composables/
+│   ├── pages/
+│   ├── stores/
+│   ├── types/
+│   ├── nuxt.config.ts
+│   └── .env.example
 ├── infra/
 │   └── docker-compose.yml
 └── README.md
@@ -79,7 +102,7 @@ Zusatzdaten werden ausserhalb des App-Codes unter `../data/` gespeichert:
 ### 1. Datenbank starten
 
 ```bash
-cd wohnortkompass/infra
+cd infra
 docker compose up -d
 ```
 
@@ -88,7 +111,7 @@ Die Datenbank ist danach unter `localhost:5433` verfuegbar.
 ### 2. Backend einrichten
 
 ```bash
-cd wohnortkompass/apps/backend
+cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -e .
@@ -105,7 +128,7 @@ Backend-Standardadresse:
 ### 3. Frontend einrichten
 
 ```bash
-cd wohnortkompass/apps/frontend
+cd frontend
 pnpm install
 cp .env.example .env
 pnpm dev
@@ -123,7 +146,7 @@ Die Nuxt-App spricht standardmaessig mit:
 
 ### Backend
 
-Wichtige Variablen aus `apps/backend/.env.example`:
+Wichtige Variablen aus `backend/.env.example`:
 
 - `DATABASE_URL`
   SQLAlchemy/psycopg-Verbindung zur PostGIS-Datenbank
@@ -144,27 +167,27 @@ Wichtige Variablen aus `apps/backend/.env.example`:
 
 ### Frontend
 
-Aus `apps/frontend/.env.example`:
+Aus `frontend/.env.example`:
 
 - `NUXT_PUBLIC_API_BASE`
   Basis-URL der API
 
 ## Datenquellen und ETL
 
-Die ETL-Jobs sitzen unter `apps/backend/app/etl`.
+Die ETL-Jobs sitzen unter `backend/app/etl`.
 
 Typische Reihenfolge:
 
 ```bash
-cd wohnortkompass/apps/backend
-./venv/bin/python -m app.etl.import_bkg
-./venv/bin/python -m app.etl.import_destatis
-./venv/bin/python -m app.etl.import_dwd
-./venv/bin/python -m app.etl.import_uba
-./venv/bin/python -m app.etl.import_unfallatlas
-./venv/bin/python -m app.etl.import_osm
-./venv/bin/python -m app.etl.import_oepnv
-./venv/bin/python -m app.etl.build_scores
+cd backend
+python -m app.etl.import_bkg
+python -m app.etl.import_destatis
+python -m app.etl.import_dwd
+python -m app.etl.import_uba
+python -m app.etl.import_unfallatlas
+python -m app.etl.import_osm
+python -m app.etl.import_oepnv
+python -m app.etl.build_scores
 ```
 
 ### BKG VG25
@@ -258,6 +281,94 @@ Aktuell:
 
 `import_osm` nutzt `osm2pgsql`-Tabellen und Gemeindegrenzen, um Alltagsnaehe zu aggregieren.
 
+## Lizenz und Attribution
+
+Bitte die Lizenz- und Attributionspflichten der eingebundenen Datenquellen beachten. Die folgende Uebersicht beschreibt den aktuell verwendeten Stand der im Projekt genutzten Quellen. Im Zweifel gilt immer die Lizenzangabe direkt am konkreten Datensatz oder Dienst.
+
+### OpenStreetMap
+
+- Lizenz: `Open Data Commons Open Database License (ODbL) 1.0`
+- Mindestattribution: `© OpenStreetMap-Mitwirkende`
+- Zusaetzlich muss kenntlich gemacht werden, dass die Daten unter ODbL stehen.
+- Quelle:
+  - https://www.openstreetmap.org/copyright
+
+### BKG VG25
+
+- Datensatz: `Verwaltungsgebiete 1:25 000 (VG25)`
+- Lizenz: `CC BY 4.0`
+- Quellenvermerk laut BKG:
+  - `© BKG (Jahr des letzten Datenbezugs) CC BY 4.0, Datenquellen: https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg25.pdf`
+- Bei veraenderten Daten ist ein Veraenderungshinweis anzubringen.
+- Quellen:
+  - https://gdz.bkg.bund.de/index.php/default/digitale-geodaten/verwaltungsgebiete/verwaltungsgebiete-1-25-000-stand-31-12-vg25.html
+  - https://www.bkg.bund.de
+
+### Destatis / Regionalstatistik / GENESIS
+
+- Lizenz: `Datenlizenz Deutschland – Namensnennung – Version 2.0`
+- Kurzform: `dl-de/by-2-0`
+- Empfohlener Quellenvermerk:
+  - `Datenquelle: Statistisches Bundesamt (Destatis), Genesis-Online, <Abrufdatum>; Datenlizenz by-2-0`
+- Bei eigener Berechnung oder Darstellung sollte dies im Quellenvermerk kenntlich gemacht werden.
+- Quellen:
+  - https://www.destatis.de/DE/Service/OpenData/genesis-api-webservice-oberflaeche.html
+  - https://www.destatis.de/DE/Service/Impressum/copyright-genesis-online.html
+
+### DWD
+
+- Fuer die im Projekt genutzten DWD-Open-Data- bzw. CDC-Daten ist `CC BY 4.0` dokumentiert.
+- Empfohlene Attribution: `Quelle: Deutscher Wetterdienst (DWD)`
+- Die konkrete Datensatzdokumentation des jeweils genutzten Open-Data-Produkts ist zusaetzlich zu beachten.
+- Quellen:
+  - https://opendata.dwd.de/climate_environment/REA/Nutzungsbedingungen_German.pdf
+  - https://www.dwd.de/EN/ourservices/cdc/cdc.html
+
+### Umweltbundesamt
+
+- UBA unterscheidet zwischen Website-Inhalten und bereitgestellten Daten.
+- Website-Texte, Grafiken und Medien stehen, soweit nicht anders gekennzeichnet, unter `CC BY-NC-ND 4.0`.
+- Fuer bereitgestellte Daten und Metadaten weist das UBA ausdruecklich auf deren zulaessige Nutzung hin; massgeblich bleiben die Bedingungen des jeweiligen Datenangebots.
+- Empfehlung fuer das Projekt:
+  - Datenseitige Attribution immer direkt am konkret verwendeten UBA-Dienst oder Datensatz pruefen.
+  - Website-Lizenz nicht pauschal auf die Fachdaten uebertragen.
+- Quelle:
+  - https://luftdaten.umweltbundesamt.de/datenschutz-haftung-und-urheberrecht
+
+### Unfallatlas
+
+- Die Unfallatlas-Daten werden als Open Data ueber das Statistikportal bereitgestellt.
+- Die Open-Data-Seiten des Statistikportals verweisen fuer statistische Daten allgemein auf die `Datenlizenz Deutschland 2.0`.
+- Bei kartografischen Anwendungen koennen fuer zusaetzliche Geobasisdaten gesonderte Lizenzhinweise gelten.
+- Da der Unfallatlas als Statistikportal-Open-Data-Angebot beschrieben ist, ist `dl-de/by-2-0` hier die naheliegende Lizenzgrundlage.
+- Quellen:
+  - https://www.statistikportal.de/de/karten/unfallatlas
+  - https://www.statistikportal.de/de/open-data
+
+Hinweis: Die konkrete Open-Data-Downloadseite des Unfallatlas sollte bei produktiver Veroeffentlichung nochmals auf einen expliziten Lizenztext geprueft werden.
+
+### GTFS-Datenquellen aus OpenData OePNV
+
+- Das Portal `OpenData OePNV` hat keine einheitliche Datenlizenz fuer alle Datensaetze.
+- Laut Portal ist fuer die Lizenzierung jeweils der konkrete Datenanbieter zustaendig.
+- Fuer den im Projekt verwendeten deutschlandweiten `DELFI GTFS`-Datensatz ist aktuell `Creative Commons Namensnennung (CC-BY)` angegeben.
+- Quellen:
+  - https://www.opendata-oepnv.de/ht/de/standards/nutzungsbedingungen
+  - https://www.opendata-oepnv.de/ht/de/organisation/delfi/startseite?cHash=af4be4c0a9de59953fb9ee2325ef818f&tx_vrrkit_view%5Baction%5D=details&tx_vrrkit_view%5Bcontroller%5D=View&tx_vrrkit_view%5Bdataset_name%5D=deutschlandweite-sollfahrplandaten-gtfs
+  - https://www.opendata-oepnv.de/ht/de/standards/uebersicht-der-verwendeten-lizenzen
+
+## Praktische Empfehlung fuer das Projekt
+
+Bei jeder oeffentlichen Ausspielung sollten mindestens folgende Quellenhinweise sichtbar oder in einer Methodik-/Impressumsseite verlinkt sein:
+
+- `© OpenStreetMap-Mitwirkende, ODbL 1.0`
+- `© BKG <Jahr des letzten Datenbezugs>, CC BY 4.0`
+- `Datenquelle: Statistisches Bundesamt (Destatis), Genesis-Online, dl-de/by-2-0`
+- `Quelle: Deutscher Wetterdienst (DWD)`
+- `Quelle: Umweltbundesamt (je nach Datensatz/Dienst)`
+- `Quelle: Statistische Aemter des Bundes und der Laender / Unfallatlas`
+- `Quelle: DELFI / OpenData OePNV, gemaess Datensatzlizenz`
+
 Unterstuetzte Kategorien:
 
 - `pharmacy`
@@ -326,11 +437,11 @@ Die Nuxt-App bietet aktuell:
 
 Wichtige Dateien:
 
-- `apps/frontend/pages/index.vue`
-- `apps/frontend/pages/finder.vue`
-- `apps/frontend/pages/compare.vue`
-- `apps/frontend/pages/methodik.vue`
-- `apps/frontend/pages/region/[slug].vue`
+- `frontend/pages/index.vue`
+- `frontend/pages/finder.vue`
+- `frontend/pages/compare.vue`
+- `frontend/pages/methodik.vue`
+- `frontend/pages/region/[slug].vue`
 
 ## Datenbank und Persistenz
 
@@ -353,8 +464,6 @@ Docker Compose startet standardmaessig:
 
 ## Bekannte Besonderheiten
 
-- Das Repo enthaelt aktuell bereits generierte Artefakte wie `node_modules`, `.nuxt`, `.output`, `venv` und Rohdaten. Eine `.gitignore` sollte diese Verzeichnisse ausschliessen.
-- `pnpm-workspace.yaml` verweist derzeit noch auf `apps/web`, waehrend das reale Frontend unter `apps/frontend` liegt.
 - Einige Quellen sind langsam oder erfordern Zugangsdaten, insbesondere Destatis/Regionalstatistik.
 - Nicht jede BKG-Lieferung enthaelt Einwohnerfelder. In diesem Fall wird die Gesamtbevoelkerung aus Destatis nachgezogen.
 
