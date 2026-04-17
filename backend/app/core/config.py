@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_name: str = "Wohnort-Kompass API"
     env: str = "development"
     api_prefix: str = "/api/v1"
+    cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     database_url: str = "postgresql+psycopg://wohnortkompass:wohnortkompass@localhost:5433/wohnortkompass"
     default_score_period: str = "current"
     raw_data_dir: str = "../../data/raw"
@@ -48,6 +49,10 @@ class Settings(BaseSettings):
     @property
     def staging_data_path(self) -> Path:
         return (Path(__file__).resolve().parents[3] / self.staging_data_dir).resolve()
+
+    @property
+    def cors_allow_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
 
 settings = Settings()
