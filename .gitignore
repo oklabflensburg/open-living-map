@@ -1,0 +1,30 @@
+.DS_Store
+.vscode/
+
+# Local data volumes and ETL artifacts
+data/
+
+# Monorepo dependencies and frontend build output
+node_modules/
+frontend/node_modules/
+frontend/.nuxt/
+frontend/.output/
+frontend/.cache/
+
+# Backend virtualenv and local config
+backend/venv/
+backend/.env
+frontend/.env
+
+# Python caches and packaging artifacts
+**/__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log

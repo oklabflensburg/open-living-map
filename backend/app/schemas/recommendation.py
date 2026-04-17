@@ -1,0 +1,45 @@
+from pydantic import BaseModel, Field
+
+
+class RecommendationInput(BaseModel):
+    climate_weight: int = Field(ge=0, le=5)
+    air_weight: int = Field(ge=0, le=5)
+    safety_weight: int = Field(ge=0, le=5)
+    demographics_weight: int = Field(ge=0, le=5)
+    amenities_weight: int = Field(ge=0, le=5)
+    oepnv_weight: int = Field(ge=0, le=5)
+    state_code: str | None = Field(default=None, pattern=r"^\d{2}$")
+
+
+class RecommendationIndicatorDetail(BaseModel):
+    key: str
+    name: str
+    category: str
+    unit: str
+    raw_value: float
+    normalized_value: float
+    quality_flag: str
+    text: str
+
+
+class RecommendationItem(BaseModel):
+    ars: str
+    slug: str
+    name: str
+    centroid_lat: float | None = None
+    centroid_lon: float | None = None
+    score_total: float
+    score_climate: float
+    score_air: float
+    score_safety: float
+    score_demographics: float
+    score_amenities: float
+    score_oepnv: float
+    reason: str
+    score_formula: str = ""
+    calculation_details: list[str] = Field(default_factory=list)
+    indicators: list[RecommendationIndicatorDetail] = Field(default_factory=list)
+
+
+class RecommendationResponse(BaseModel):
+    items: list[RecommendationItem]

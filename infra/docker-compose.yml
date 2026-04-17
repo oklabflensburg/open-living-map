@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: wohnortkompass-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wohnortkompass
+      POSTGRES_USER: wohnortkompass
+      POSTGRES_PASSWORD: wohnortkompass
+    ports:
+      - "5433:5432"
+    volumes:
+      - wohnortkompass_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wohnortkompass -d wohnortkompass"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  wohnortkompass_pgdata:

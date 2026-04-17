@@ -1,0 +1,23 @@
+from datetime import datetime
+
+from sqlalchemy import Column, JSON, UniqueConstraint
+from sqlmodel import Field, SQLModel
+
+
+class RegionScoreSnapshot(SQLModel, table=True):
+    __tablename__ = "region_score_snapshot"
+    __table_args__ = (UniqueConstraint("region_id", "profile_key", "period"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    region_id: int = Field(foreign_key="region.id", index=True)
+    profile_key: str = Field(index=True, default="base")
+    period: str = Field(index=True)
+    score_total: float = 0
+    score_climate: float = 0
+    score_air: float = 0
+    score_safety: float = 0
+    score_demographics: float = 0
+    score_amenities: float = 0
+    score_oepnv: float = 0
+    explanation_json: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
