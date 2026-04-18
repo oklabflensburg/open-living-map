@@ -75,6 +75,19 @@ export interface AccidentStat {
   count_total: number
 }
 
+export interface AirStationInfo {
+  indicator_key: string
+  label: string
+  raw_value: number | null
+  station_id: string
+  station_code: string | null
+  station_name: string
+  latitude: number | null
+  longitude: number | null
+  station_page_url: string | null
+  measures_url: string
+}
+
 export interface GeoJsonFeatureCollection {
   type: 'FeatureCollection'
   features: Array<{
@@ -91,6 +104,7 @@ export interface RegionDetailResponse {
   source_links: string[]
   amenity_stats: AmenityStat[]
   accident_stats: AccidentStat[]
+  air_stations: AirStationInfo[]
   geometry: Record<string, unknown> | null
   score_formula: string
   calculation_details: string[]

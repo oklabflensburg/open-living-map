@@ -22,10 +22,70 @@
 import RegionCard from '~/components/RegionCard.vue'
 import type { RecommendationItem } from '~/types/api'
 
+const { siteName, absoluteUrl } = useSiteSeo()
 const { fetchCompare } = useRecommendations()
 
 const arsInput = ref('09162,06412,05315')
 const items = ref<RecommendationItem[]>([])
+
+const title = 'Vergleich'
+const description = 'Vergleiche bis zu drei Regionen direkt anhand ihrer Teil-Scores und Datenbasis.'
+
+useSeoMeta({
+  title,
+  description,
+  robots: 'noindex,follow',
+  ogUrl: absoluteUrl('/compare'),
+  ogTitle: `${title} | ${siteName}`,
+  ogDescription: description,
+  ogType: 'website',
+  twitterTitle: `${title} | ${siteName}`,
+  twitterDescription: description,
+  twitterCard: 'summary'
+})
+
+useHead(() => ({
+  link: [{ rel: 'canonical', href: absoluteUrl('/compare') }],
+  script: [
+    {
+      key: 'ld-compare',
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: `${title} | ${siteName}`,
+        url: absoluteUrl('/compare'),
+        description,
+        breadcrumb: {
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            {
+              '@type': 'ListItem',
+              position: 1,
+              name: 'Startseite',
+              item: absoluteUrl('/')
+            },
+            {
+              '@type': 'ListItem',
+              position: 2,
+              name: title,
+              item: absoluteUrl('/compare')
+            }
+          ]
+        },
+        mainEntity: {
+          '@type': 'ItemList',
+          itemListElement: items.value.map((item, index) => ({
+            '@type': 'ListItem',
+            position: index + 1,
+            url: absoluteUrl(`/region/${item.slug}`),
+            name: item.name
+          }))
+        }
+      })
+    }
+  ]
+}))
 
 async function runCompare() {
   const ars = arsInput.value

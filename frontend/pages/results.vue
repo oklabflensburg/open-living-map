@@ -28,12 +28,29 @@ import RegionMap from '~/components/RegionMap.vue'
 import { usePreferencesStore } from '~/stores/preferences'
 import type { RecommendationResponse } from '~/types/api'
 
+const { siteName, absoluteUrl } = useSiteSeo()
 const store = usePreferencesStore()
 const { fetchRecommendations } = useRecommendations()
 
 const pending = ref(true)
 const error = ref('')
 const response = ref<RecommendationResponse | null>(null)
+
+const title = 'Ranking'
+const description = 'Ergebnisse und Kartenansicht der berechneten Wohnort-Empfehlungen.'
+
+useSeoMeta({
+  title,
+  description,
+  robots: 'noindex,follow',
+  ogUrl: absoluteUrl('/results'),
+  ogTitle: `${title} | ${siteName}`,
+  ogDescription: description,
+  ogType: 'website',
+  twitterTitle: `${title} | ${siteName}`,
+  twitterDescription: description,
+  twitterCard: 'summary'
+})
 
 const states = [
   { code: '01', name: 'Schleswig-Holstein' },
@@ -43,7 +60,7 @@ const states = [
   { code: '05', name: 'Nordrhein-Westfalen' },
   { code: '06', name: 'Hessen' },
   { code: '07', name: 'Rheinland-Pfalz' },
-  { code: '08', name: 'Baden-Wuerttemberg' },
+  { code: '08', name: 'Baden-Württemberg' },
   { code: '09', name: 'Bayern' },
   { code: '10', name: 'Saarland' },
   { code: '11', name: 'Berlin' },
@@ -51,7 +68,7 @@ const states = [
   { code: '13', name: 'Mecklenburg-Vorpommern' },
   { code: '14', name: 'Sachsen' },
   { code: '15', name: 'Sachsen-Anhalt' },
-  { code: '16', name: 'Thueringen' }
+  { code: '16', name: 'Thüringen' }
 ]
 
 const selectedStateName = computed(() => {
@@ -59,6 +76,52 @@ const selectedStateName = computed(() => {
     return 'Deutschlandweit'
   }
   return states.find((state) => state.code === store.state_code)?.name || 'Unbekanntes Bundesland'
+})
+
+useHead(() => {
+  const items = (response.value?.items || []).slice(0, 10)
+  return {
+    link: [{ rel: 'canonical', href: absoluteUrl('/results') }],
+    script: [
+      {
+        key: 'ld-results',
+        type: 'application/ld+json',
+        children: JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'CollectionPage',
+          name: `${title} | ${siteName}`,
+          url: absoluteUrl('/results'),
+          description,
+          breadcrumb: {
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: 'Startseite',
+                item: absoluteUrl('/')
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: title,
+                item: absoluteUrl('/results')
+              }
+            ]
+          },
+          mainEntity: {
+            '@type': 'ItemList',
+            itemListElement: items.map((item, index) => ({
+              '@type': 'ListItem',
+              position: index + 1,
+              url: absoluteUrl(`/region/${item.slug}`),
+              name: item.name
+            }))
+          }
+        })
+      }
+    ]
+  }
 })
 
 onMounted(async () => {

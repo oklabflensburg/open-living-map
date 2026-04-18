@@ -21,15 +21,15 @@
       <ScoreBar label="Luft" :value="detail.scores.air || 0" />
       <ScoreBar label="Sicherheit" :value="detail.scores.safety || 0" />
       <ScoreBar label="Demografie" :value="detail.scores.demographics || 0" />
-      <ScoreBar label="Alltagsnaehe" :value="detail.scores.amenities || 0" />
-      <ScoreBar label="OEPNV" :value="detail.scores.oepnv || 0" />
+      <ScoreBar label="Alltagsnähe" :value="detail.scores.amenities || 0" />
+      <ScoreBar label="ÖPNV" :value="detail.scores.oepnv || 0" />
     </div>
 
     <div class="rounded-xl border border-slate-200 bg-white p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 class="text-lg font-semibold">Demografie gesamt</h2>
-          <p class="text-sm text-slate-500">Gemeindedatensatz und Regionalstatistik fuer {{ detail.region.name }}</p>
+          <p class="text-sm text-slate-500">Gemeindedatensatz und Regionalstatistik für {{ detail.region.name }}</p>
         </div>
       </div>
 
@@ -42,15 +42,61 @@
         </article>
       </div>
       <p v-else class="text-sm text-amber-700">
-        Fuer diese Gemeinde sind aktuell keine zusammengefassten Demografie-Daten verfuegbar.
+        Für diese Gemeinde sind aktuell keine zusammengefassten Demografie-Daten verfügbar.
       </p>
     </div>
 
     <div class="rounded-xl border border-slate-200 bg-white p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 class="text-lg font-semibold">OSM-Alltagsnaehe</h2>
-          <p class="text-sm text-slate-500">POI-Kategorien fuer {{ detail.region.name }}</p>
+          <h2 class="text-lg font-semibold">Luftdaten-Stationen</h2>
+          <p class="text-sm text-slate-500">Nächstgelegene UBA-Messstation je Schadstoff für {{ detail.region.name }}</p>
+        </div>
+      </div>
+
+      <div v-if="detail.air_stations.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <article
+          v-for="station in detail.air_stations"
+          :key="station.indicator_key"
+          class="cursor-pointer rounded-lg border p-4 transition"
+          :class="selectedAirStationKey === station.indicator_key
+            ? 'border-sky-400 bg-sky-50'
+            : 'border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50/50'"
+          @click="toggleAirStation(station.indicator_key)"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ station.label }}</p>
+          <p class="mt-2 text-2xl font-semibold text-slate-900">
+            {{ station.raw_value !== null ? formatAirValue(station.raw_value) : 'keine Daten' }}
+          </p>
+          <p class="mt-1 text-xs text-slate-500">Proxy aus der nächstgelegenen Station</p>
+          <a
+            :href="station.station_page_url || station.measures_url"
+            target="_blank"
+            rel="noreferrer"
+            class="mt-4 block font-medium text-sky-700 underline decoration-sky-300 underline-offset-4"
+          >
+            Nächstgelegene Station: {{ station.station_name }}
+            <span v-if="station.station_code">({{ station.station_code }})</span>
+          </a>
+          <p v-if="station.latitude !== null && station.longitude !== null" class="mt-1 text-xs text-slate-500">
+            Koordinaten {{ formatStationCoordinate(station.latitude) }}, {{ formatStationCoordinate(station.longitude) }}
+          </p>
+          <p class="mt-1 text-xs text-slate-500">Stations-ID {{ station.station_id }}</p>
+          <p class="mt-3 text-xs font-medium text-sky-700">
+            {{ selectedAirStationKey === station.indicator_key ? 'Marker auf Karte fokussiert' : 'Marker auf Karte anzeigen' }}
+          </p>
+        </article>
+      </div>
+      <p v-else class="text-sm text-amber-700">
+        Für diese Gemeinde sind aktuell keine Informationen zur nächstgelegenen UBA-Messstation geladen.
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-slate-200 bg-white p-6">
+      <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 class="text-lg font-semibold">OSM-Alltagsnähe</h2>
+          <p class="text-sm text-slate-500">POI-Kategorien für {{ detail.region.name }}</p>
         </div>
       </div>
 
@@ -68,15 +114,15 @@
         </article>
       </div>
       <p v-else class="text-sm text-amber-700">
-        Fuer diese Gemeinde sind aktuell keine OSM-Alltagsnaehe-Daten nach Kategorien geladen.
+        Für diese Gemeinde sind aktuell keine OSM-Alltagsnähe-Daten nach Kategorien geladen.
       </p>
     </div>
 
     <div class="rounded-xl border border-slate-200 bg-white p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 class="text-lg font-semibold">Verkehrsunfaelle</h2>
-          <p class="text-sm text-slate-500">Unfallatlas-Kategorien fuer {{ detail.region.name }}</p>
+          <h2 class="text-lg font-semibold">Verkehrsunfälle</h2>
+          <p class="text-sm text-slate-500">Unfallatlas-Kategorien für {{ detail.region.name }}</p>
         </div>
       </div>
 
@@ -95,7 +141,7 @@
         </article>
       </div>
       <p v-else class="text-sm text-amber-700">
-        Fuer diese Gemeinde sind aktuell keine Unfallatlas-Daten nach Kategorien geladen.
+        Für diese Gemeinde sind aktuell keine Unfallatlas-Daten nach Kategorien geladen.
       </p>
     </div>
 
@@ -106,12 +152,13 @@
           <p class="text-sm text-slate-500">BKG VG250 Gemeindegeometrie für {{ detail.region.name }}</p>
         </div>
         <p v-if="!detail.geometry" class="text-sm text-amber-700">
-          Keine Polygongeometrie geladen. Fuehre `python -m app.etl.import_bkg` erneut aus.
+          Keine Polygongeometrie geladen. Führe `python -m app.etl.import_bkg` erneut aus.
         </p>
       </div>
       <RegionBoundaryMap :geometry="detail.geometry" :name="detail.region.name"
         :centroid-lat="detail.region.centroid_lat" :centroid-lon="detail.region.centroid_lon"
-        :overlay-pois="activeOverlayPois" :selected-overlay-label="activeOverlayLabel" />
+        :overlay-pois="activeOverlayPois" :selected-overlay-label="activeOverlayLabel"
+        :air-stations="detail.air_stations" :selected-air-station-id="selectedAirStationId" />
     </div>
 
     <div class="rounded-xl border border-slate-200 bg-white p-6">
@@ -122,8 +169,8 @@
       </p>
       <div v-if="missingDemographics"
         class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        Fuer diese Gemeinde sind aktuell keine Demografie-Indikatoren aus der Regionalstatistik geladen.
-        Der Demografie-Score bleibt deshalb voruebergehend bei 0, bis der Gemeinde-Import erfolgreich durchgelaufen ist.
+        Für diese Gemeinde sind aktuell keine Demografie-Indikatoren aus der Regionalstatistik geladen.
+        Der Demografie-Score bleibt deshalb vorübergehend bei 0, bis der Gemeinde-Import erfolgreich durchgelaufen ist.
       </div>
 
       <div class="mt-4 rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
@@ -149,7 +196,7 @@
             </div>
             <p class="mt-1 text-sm text-slate-600">{{ indicator.text }}</p>
             <p v-if="indicator.quality_flag !== 'ok'" class="mt-1 text-xs text-amber-700">
-              Datenqualitaet: {{ indicator.quality_flag }}
+              Datenqualität: {{ indicator.quality_flag }}
             </p>
           </article>
         </div>
@@ -179,6 +226,7 @@ import SourceList from '~/components/SourceList.vue'
 import RegionBoundaryMap from '~/components/RegionBoundaryMap.vue'
 import type { GeoJsonFeatureCollection, RecommendationIndicatorDetail, RegionDetailResponse } from '~/types/api'
 
+const { siteName, absoluteUrl } = useSiteSeo()
 const route = useRoute()
 const { fetchRegion, fetchAmenityPois, fetchAccidentPois } = useRegions()
 
@@ -188,14 +236,103 @@ const amenityPois = ref<GeoJsonFeatureCollection | null>(null)
 const selectedAmenityCategory = ref<string | null>(null)
 const accidentPois = ref<GeoJsonFeatureCollection | null>(null)
 const selectedAccidentCategory = ref<string | null>(null)
+const selectedAirStationKey = ref<string | null>(null)
+
+useSeoMeta({
+  title: () => (detail.value ? `${detail.value.region.name}` : 'Region'),
+  description: () =>
+    detail.value
+      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+      : 'Region im Wohnort-Kompass',
+  ogUrl: () => absoluteUrl(`/region/${String(route.params.slug)}`),
+  ogTitle: () => (detail.value ? `${detail.value.region.name} | ${siteName}` : `Region | ${siteName}`),
+  ogDescription: () =>
+    detail.value
+      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+      : 'Region im Wohnort-Kompass',
+  ogType: 'article',
+  twitterTitle: () => (detail.value ? `${detail.value.region.name} | ${siteName}` : `Region | ${siteName}`),
+  twitterDescription: () =>
+    detail.value
+      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+      : 'Region im Wohnort-Kompass',
+  twitterCard: 'summary'
+})
+
+useHead(() => {
+  const canonicalPath = `/region/${String(route.params.slug)}`
+  const region = detail.value?.region
+  const description = region
+    ? `${region.name} in ${region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+    : 'Region im Wohnort-Kompass'
+
+  const graph: Record<string, unknown>[] = [
+    {
+      '@type': 'WebPage',
+      name: region ? `${region.name} | ${siteName}` : `Region | ${siteName}`,
+      url: absoluteUrl(canonicalPath),
+      description,
+      breadcrumb: {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'Startseite',
+            item: absoluteUrl('/')
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: region ? region.name : 'Region',
+            item: absoluteUrl(canonicalPath)
+          }
+        ]
+      },
+      isPartOf: {
+        '@id': `${absoluteUrl('/')}#website`
+      }
+    }
+  ]
+
+  if (region) {
+    graph.push({
+      '@type': 'AdministrativeArea',
+      '@id': `${absoluteUrl(canonicalPath)}#administrative-area`,
+      name: region.name,
+      identifier: region.ars,
+      containedInPlace: region.state_name,
+      geo:
+        region.centroid_lat !== null && region.centroid_lon !== null
+          ? {
+              '@type': 'GeoCoordinates',
+              latitude: region.centroid_lat,
+              longitude: region.centroid_lon
+            }
+          : undefined,
+      sameAs: [region.wikipedia_url, region.wikidata_url].filter(Boolean)
+    })
+  }
+
+  return {
+    link: [{ rel: 'canonical', href: absoluteUrl(canonicalPath) }],
+    script: [
+      {
+        key: 'ld-region',
+        type: 'application/ld+json',
+        children: JSON.stringify(graph.length === 1 ? { '@context': 'https://schema.org', ...graph[0] } : { '@context': 'https://schema.org', '@graph': graph })
+      }
+    ]
+  }
+})
 
 const categoryLabels: Record<string, string> = {
   climate: 'Klima',
   air: 'Luft',
   safety: 'Sicherheit',
   demographics: 'Demografie',
-  amenities: 'Alltagsnaehe',
-  oepnv: 'OEPNV'
+  amenities: 'Alltagsnähe',
+  oepnv: 'ÖPNV'
 }
 
 function categoryLabel(category: string) {
@@ -212,6 +349,14 @@ function formatPercent(value: number) {
 
 function formatPer10k(value: number) {
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+}
+
+function formatAirValue(value: number) {
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value) + ' µg/m³'
+}
+
+function formatStationCoordinate(value: number) {
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(value)
 }
 
 function indicatorByKey(key: string): RecommendationIndicatorDetail | null {
@@ -276,6 +421,13 @@ const selectedAmenityLabel = computed(() => {
   return detail.value.amenity_stats.find((item) => item.category === selectedAmenityCategory.value)?.label ?? null
 })
 
+const selectedAirStationId = computed(() => {
+  if (!detail.value || !selectedAirStationKey.value) {
+    return null
+  }
+  return detail.value.air_stations.find((station) => station.indicator_key === selectedAirStationKey.value)?.station_id ?? null
+})
+
 const selectedAccidentLabel = computed(() => {
   if (!detail.value || !selectedAccidentCategory.value) {
     return null
@@ -299,6 +451,7 @@ async function toggleAmenityPois(category: string) {
 
   selectedAccidentCategory.value = null
   accidentPois.value = null
+  selectedAirStationKey.value = null
   selectedAmenityCategory.value = category
   amenityPois.value = await fetchAmenityPois(String(route.params.slug), category)
 }
@@ -316,8 +469,17 @@ async function toggleAccidentPois(category: string) {
 
   selectedAmenityCategory.value = null
   amenityPois.value = null
+  selectedAirStationKey.value = null
   selectedAccidentCategory.value = category
   accidentPois.value = await fetchAccidentPois(String(route.params.slug), category)
+}
+
+function toggleAirStation(indicatorKey: string) {
+  selectedAmenityCategory.value = null
+  amenityPois.value = null
+  selectedAccidentCategory.value = null
+  accidentPois.value = null
+  selectedAirStationKey.value = selectedAirStationKey.value === indicatorKey ? null : indicatorKey
 }
 
 onMounted(async () => {

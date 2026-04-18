@@ -49,31 +49,31 @@ const emit = defineEmits<{
 }>()
 
 const states = [
-  { code: '01', name: 'Schleswig-Holstein' },
-  { code: '02', name: 'Hamburg' },
-  { code: '03', name: 'Niedersachsen' },
-  { code: '04', name: 'Bremen' },
-  { code: '05', name: 'Nordrhein-Westfalen' },
-  { code: '06', name: 'Hessen' },
-  { code: '07', name: 'Rheinland-Pfalz' },
-  { code: '08', name: 'Baden-Wuerttemberg' },
+  { code: '08', name: 'Baden-Württemberg' },
   { code: '09', name: 'Bayern' },
-  { code: '10', name: 'Saarland' },
   { code: '11', name: 'Berlin' },
   { code: '12', name: 'Brandenburg' },
+  { code: '04', name: 'Bremen' },
+  { code: '02', name: 'Hamburg' },
+  { code: '06', name: 'Hessen' },
   { code: '13', name: 'Mecklenburg-Vorpommern' },
+  { code: '03', name: 'Niedersachsen' },
+  { code: '05', name: 'Nordrhein-Westfalen' },
+  { code: '07', name: 'Rheinland-Pfalz' },
+  { code: '10', name: 'Saarland' },
   { code: '14', name: 'Sachsen' },
   { code: '15', name: 'Sachsen-Anhalt' },
-  { code: '16', name: 'Thueringen' }
+  { code: '01', name: 'Schleswig-Holstein' },
+  { code: '16', name: 'Thüringen' }
 ]
 
 const fields: Array<{ key: keyof Omit<RecommendationInput, 'state_code'>; label: string }> = [
   { key: 'climate_weight', label: 'Klima' },
-  { key: 'air_weight', label: 'Luftqualitaet' },
+  { key: 'air_weight', label: 'Luftqualität' },
   { key: 'safety_weight', label: 'Verkehrssicherheit' },
   { key: 'demographics_weight', label: 'Demografie/Familie' },
-  { key: 'amenities_weight', label: 'Alltagsnaehe' },
-  { key: 'oepnv_weight', label: 'OEPNV' }
+  { key: 'amenities_weight', label: 'Alltagsnähe' },
+  { key: 'oepnv_weight', label: 'ÖPNV' }
 ]
 
 function onInput(key: keyof Omit<RecommendationInput, 'state_code'>, event: Event) {

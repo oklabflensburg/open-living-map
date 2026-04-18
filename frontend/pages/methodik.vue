@@ -29,6 +29,58 @@
 <script setup lang="ts">
 import SourceList from '~/components/SourceList.vue'
 
+const { siteName, absoluteUrl } = useSiteSeo()
+
+const title = 'Methodik'
+const description =
+  'Dokumentation der Indikatoren, Datenquellen, Normierung und Lizenzhinweise von Wohnort-Kompass.'
+
+useSeoMeta({
+  title,
+  description,
+  ogUrl: absoluteUrl('/methodik'),
+  ogTitle: `${title} | ${siteName}`,
+  ogDescription: description,
+  ogType: 'article',
+  twitterTitle: `${title} | ${siteName}`,
+  twitterDescription: description,
+  twitterCard: 'summary'
+})
+
+useHead(() => ({
+  link: [{ rel: 'canonical', href: absoluteUrl('/methodik') }],
+  script: [
+    {
+      key: 'ld-methodik',
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'TechArticle',
+        headline: `${title} | ${siteName}`,
+        url: absoluteUrl('/methodik'),
+        description,
+        breadcrumb: {
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            {
+              '@type': 'ListItem',
+              position: 1,
+              name: 'Startseite',
+              item: absoluteUrl('/')
+            },
+            {
+              '@type': 'ListItem',
+              position: 2,
+              name: title,
+              item: absoluteUrl('/methodik')
+            }
+          ]
+        }
+      })
+    }
+  ]
+}))
+
 const sources = [
   'https://www.destatis.de/DE/Service/OpenData/karten-geodaten.html',
   'https://www-genesis.destatis.de/datenbank/online#modal=web-service-api',

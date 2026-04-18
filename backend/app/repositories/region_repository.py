@@ -53,7 +53,7 @@ ACCIDENT_CATEGORY_ORDER = [
 ]
 
 ACCIDENT_CATEGORY_LABELS = {
-    "killed": "Getoetete",
+    "killed": "Getötete",
     "seriously_injured": "Schwerverletzte",
     "slightly_injured": "Leichtverletzte",
 }
@@ -265,6 +265,47 @@ class RegionRepository:
         ).all()
         counts = {str(row[0]): int(row[1]) for row in rows}
         return [(category, counts[category]) for category in ACCIDENT_CATEGORY_ORDER if category in counts]
+
+    def list_air_stations(
+        self, ars: str
+    ) -> list[tuple[str, str, str | None, str, float | None, float | None, str | None, str]]:
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('air.region_air_station') IS NOT NULL")
+        ).scalar()
+        if not table_exists:
+            return []
+        rows = self.session.execute(
+            text(
+                """
+                SELECT
+                    indicator_key,
+                    station_id,
+                    station_code,
+                    station_name,
+                    latitude,
+                    longitude,
+                    station_page_url,
+                    measures_url
+                FROM air.region_air_station
+                WHERE region_ars = :ars
+                ORDER BY indicator_key
+                """
+            ),
+            {"ars": ars},
+        ).all()
+        return [
+            (
+                str(row[0]),
+                str(row[1]),
+                str(row[2]) if row[2] is not None else None,
+                str(row[3]),
+                float(row[4]) if row[4] is not None else None,
+                float(row[5]) if row[5] is not None else None,
+                str(row[6]) if row[6] is not None else None,
+                str(row[7]),
+            )
+            for row in rows
+        ]
 
     def get_accident_pois_geojson(self, ars: str, category: str) -> dict[str, Any]:
         table_exists = self.session.execute(

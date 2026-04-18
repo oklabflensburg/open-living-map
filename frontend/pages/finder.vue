@@ -16,7 +16,7 @@
           <p class="font-semibold">Formel</p>
           <p>
             Gesamt = (Klima×{{ form.climate_weight }} + Luft×{{ form.air_weight }} + Sicherheit×{{ form.safety_weight
-            }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + OEPNV×{{
+            }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + ÖPNV×{{
               form.oepnv_weight
             }}) / {{ weightSum }}
           </p>
@@ -29,7 +29,7 @@
           Sicherheit {{ effectiveWeights.safety }}% ·
           Demografie {{ effectiveWeights.demographics }}% ·
           Alltagsnähe {{ effectiveWeights.amenities }}% ·
-          OEPNV {{ effectiveWeights.oepnv }}%
+          ÖPNV {{ effectiveWeights.oepnv }}%
         </div>
       </div>
     </div>
@@ -57,9 +57,60 @@
 import PreferenceForm from '~/components/PreferenceForm.vue'
 import { usePreferencesStore } from '~/stores/preferences'
 
+const { siteName, absoluteUrl } = useSiteSeo()
 const store = usePreferencesStore()
 const router = useRouter()
 const form = ref({ ...store.$state })
+
+const title = 'Finder'
+const description =
+  'Lege Gewichtungen für Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV fest und berechne daraus passende Regionen.'
+
+useSeoMeta({
+  title,
+  description,
+  ogUrl: absoluteUrl('/finder'),
+  ogTitle: `${title} | ${siteName}`,
+  ogDescription: description,
+  ogType: 'website',
+  twitterTitle: `${title} | ${siteName}`,
+  twitterDescription: description,
+  twitterCard: 'summary'
+})
+
+useHead(() => ({
+  link: [{ rel: 'canonical', href: absoluteUrl('/finder') }],
+  script: [
+    {
+      key: 'ld-finder',
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: `${title} | ${siteName}`,
+        url: absoluteUrl('/finder'),
+        description,
+        breadcrumb: {
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            {
+              '@type': 'ListItem',
+              position: 1,
+              name: 'Startseite',
+              item: absoluteUrl('/')
+            },
+            {
+              '@type': 'ListItem',
+              position: 2,
+              name: title,
+              item: absoluteUrl('/finder')
+            }
+          ]
+        }
+      })
+    }
+  ]
+}))
 
 const weightSum = computed(() => {
   const sum =
@@ -131,7 +182,7 @@ const categoryDetails = [
   },
   {
     key: 'oepnv',
-    title: 'OEPNV',
+    title: 'ÖPNV',
     description: 'ÖPNV-Haltestellen, Abfahrtsdichte und Regelmäßigkeit aus GTFS.',
     indicators: ['oepnv_stop_density', 'oepnv_departures_per_10k', 'oepnv_departure_regularity'],
     direction: 'Höher ist besser.'

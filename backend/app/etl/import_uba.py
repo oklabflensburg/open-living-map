@@ -1,8 +1,10 @@
 import logging
+import re
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 import httpx
+from sqlalchemy import text
 from sqlmodel import select
 
 from app.core.config import settings
@@ -19,6 +21,8 @@ logger = logging.getLogger("etl.import_uba")
 logging.basicConfig(level=logging.INFO)
 
 UBA_BASE = "https://luftdaten.umweltbundesamt.de/api/air-data/v4"
+ENV_IT_STATION_BASE = "https://www.env-it.de/stationen/public/station.do"
+STATION_CODE_PATTERN = re.compile(r"^DE[A-Z]{2,}\d{2,}$")
 
 
 def _nearest_station_value(
@@ -36,12 +40,166 @@ def _nearest_station_value(
     return best_value
 
 
+def _nearest_station(
+    municipality_lat: float,
+    municipality_lon: float,
+    station_values: list[tuple[str, float, float, float]],
+) -> tuple[str, float] | None:
+    best_station_id: str | None = None
+    best_value: float | None = None
+    best_dist = float("inf")
+    for station_id, station_lat, station_lon, station_value in station_values:
+        dist = (municipality_lat - station_lat) ** 2 + (municipality_lon - station_lon) ** 2
+        if dist < best_dist:
+            best_dist = dist
+            best_station_id = station_id
+            best_value = station_value
+    if best_station_id is None or best_value is None:
+        return None
+    return best_station_id, best_value
+
+
 def _fetch_stations() -> dict[str, list[str]]:
     with httpx.Client(timeout=60, follow_redirects=True) as client:
         response = client.get(f"{UBA_BASE}/stations/json")
         response.raise_for_status()
         payload = response.json()
     return payload.get("data", {})
+
+
+def _first_station_code(row: list[object]) -> str | None:
+    for value in row:
+        if not isinstance(value, str):
+            continue
+        candidate = value.strip()
+        if STATION_CODE_PATTERN.match(candidate):
+            return candidate
+    return None
+
+
+def _guess_station_name(station_id: str, row: list[object]) -> str:
+    code = _first_station_code(row)
+    for value in row:
+        if not isinstance(value, str):
+            continue
+        candidate = value.strip()
+        if not candidate or candidate == code:
+            continue
+        if candidate.isdigit():
+            continue
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", candidate):
+            continue
+        if candidate.startswith("http"):
+            continue
+        return candidate
+    return f"Station {station_id}"
+
+
+def _build_station_page_url(station_code: str | None) -> str | None:
+    if not station_code:
+        return None
+    return f"{ENV_IT_STATION_BASE}?selectedStationcode={station_code}"
+
+
+def _build_station_measures_url(station_id: str) -> str:
+    today = datetime.now(UTC).date().isoformat()
+    return (
+        "https://www.umweltbundesamt.de/api/air_data/v4/measures/json"
+        f"?lang=de&date_from={today}&time_from=1&date_to={today}&time_to=24&station={station_id}"
+    )
+
+
+def ensure_uba_station_table(session) -> None:
+    session.execute(text("CREATE SCHEMA IF NOT EXISTS air"))
+    session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS air.region_air_station (
+                region_ars text NOT NULL,
+                indicator_key text NOT NULL,
+                station_id text NOT NULL,
+                station_code text NULL,
+                station_name text NOT NULL,
+                latitude double precision NULL,
+                longitude double precision NULL,
+                station_page_url text NULL,
+                measures_url text NOT NULL,
+                PRIMARY KEY (region_ars, indicator_key)
+            )
+            """
+        )
+    )
+    session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS region_air_station_region_idx
+            ON air.region_air_station (region_ars)
+            """
+        )
+    )
+    session.commit()
+
+
+def _write_region_air_stations(
+    session,
+    *,
+    indicator_key: str,
+    assignments: list[tuple[str, str]],
+    station_metadata: dict[str, dict[str, object]],
+) -> None:
+    ensure_uba_station_table(session)
+    session.execute(
+        text("DELETE FROM air.region_air_station WHERE indicator_key = :indicator_key"),
+        {"indicator_key": indicator_key},
+    )
+    rows: list[dict[str, object]] = []
+    for region_ars, station_id in assignments:
+        metadata = station_metadata.get(station_id)
+        if not metadata:
+            continue
+        rows.append(
+            {
+                "region_ars": region_ars,
+                "indicator_key": indicator_key,
+                "station_id": station_id,
+                "station_code": metadata.get("station_code"),
+                "station_name": metadata.get("station_name"),
+                "latitude": metadata.get("latitude"),
+                "longitude": metadata.get("longitude"),
+                "station_page_url": metadata.get("station_page_url"),
+                "measures_url": metadata.get("measures_url"),
+            }
+        )
+    if rows:
+        session.execute(
+            text(
+                """
+                INSERT INTO air.region_air_station (
+                    region_ars,
+                    indicator_key,
+                    station_id,
+                    station_code,
+                    station_name,
+                    latitude,
+                    longitude,
+                    station_page_url,
+                    measures_url
+                ) VALUES (
+                    :region_ars,
+                    :indicator_key,
+                    :station_id,
+                    :station_code,
+                    :station_name,
+                    :latitude,
+                    :longitude,
+                    :station_page_url,
+                    :measures_url
+                )
+                """
+            ),
+            rows,
+        )
+    session.commit()
 
 
 def _fetch_measures(component_id: int, days: int = 7) -> dict[str, dict[str, list[float | int | None | str]]]:
@@ -137,7 +295,7 @@ def main() -> None:
     with with_session() as session:
         municipalities = list(session.exec(select(Region).where(Region.level == "gemeinde")))
         municipality_coords = [
-            (municipality.id, float(municipality.centroid_lat), float(municipality.centroid_lon))
+            (municipality.id, municipality.ars, float(municipality.centroid_lat), float(municipality.centroid_lon))
             for municipality in municipalities
             if municipality.centroid_lat is not None and municipality.centroid_lon is not None
         ]
@@ -152,6 +310,7 @@ def main() -> None:
             return
 
         station_positions: dict[str, tuple[float, float]] = {}
+        station_metadata: dict[str, dict[str, object]] = {}
         for station_id, row in stations.items():
             if not isinstance(row, list) or len(row) < 9:
                 continue
@@ -161,6 +320,16 @@ def main() -> None:
             except (TypeError, ValueError):
                 continue
             station_positions[station_id] = (lat, lon)
+            station_code = _first_station_code(row)
+            station_metadata[station_id] = {
+                "station_id": station_id,
+                "station_code": station_code,
+                "station_name": _guess_station_name(station_id, row),
+                "latitude": lat,
+                "longitude": lon,
+                "station_page_url": _build_station_page_url(station_code),
+                "measures_url": _build_station_measures_url(station_id),
+            }
 
         if not station_positions:
             logger.warning("Keine verwertbaren UBA-Stationen gefunden. Kein Write.")
@@ -181,7 +350,7 @@ def main() -> None:
 
             station_means = _mean_station_values(measures_data)
             positioned_station_values = [
-                (station_positions[station_id][0], station_positions[station_id][1], value)
+                (station_id, station_positions[station_id][0], station_positions[station_id][1], value)
                 for station_id, value in station_means.items()
                 if station_id in station_positions
             ]
@@ -191,13 +360,22 @@ def main() -> None:
 
             values = [
                 (municipality_id, nearest_value)
-                for municipality_id, municipality_lat, municipality_lon in municipality_coords
-                for nearest_value in [_nearest_station_value(municipality_lat, municipality_lon, positioned_station_values)]
-                if nearest_value is not None
+                for municipality_id, _, municipality_lat, municipality_lon in municipality_coords
+                for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
+                if nearest is not None
+                for _, nearest_value in [nearest]
             ]
             if not values:
                 logger.warning("UBA-Indikator %s ohne verwertbare Werte.", key)
                 continue
+
+            station_assignments = [
+                (region_ars, station_id)
+                for _, region_ars, municipality_lat, municipality_lon in municipality_coords
+                for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
+                if nearest is not None
+                for station_id, _ in [nearest]
+            ]
 
             indicator = get_or_create_indicator(
                 session,
@@ -228,6 +406,12 @@ def main() -> None:
                 values=values,
                 normalized_values=normalized_values,
                 quality_flag="nearest_station_proxy",
+            )
+            _write_region_air_stations(
+                session,
+                indicator_key=key,
+                assignments=station_assignments,
+                station_metadata=station_metadata,
             )
 
             logger.info("UBA-Indikator %s geschrieben: %s Gemeinden", key, len(values))

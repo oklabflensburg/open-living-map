@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Wohnort-Kompass</title>
+  <desc id="desc">Open-data ranking and regional comparison for municipalities and cities in Germany.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#eff6ff" />
+      <stop offset="55%" stop-color="#dbeafe" />
+      <stop offset="100%" stop-color="#fef3c7" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.94" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.78" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <circle cx="1060" cy="110" r="180" fill="#93c5fd" fill-opacity="0.28" />
+  <circle cx="150" cy="520" r="220" fill="#fde68a" fill-opacity="0.25" />
+  <rect x="72" y="72" width="1056" height="486" rx="32" fill="url(#panel)" />
+  <rect x="112" y="124" width="430" height="18" rx="9" fill="#1d4ed8" fill-opacity="0.14" />
+  <text x="112" y="220" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700">
+    Wohnort-Kompass
+  </text>
+  <text x="112" y="282" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="30">
+    Regionen in Deutschland mit offenen Daten vergleichen
+  </text>
+  <text x="112" y="332" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="24">
+    Klima, Luftqualität, Sicherheit, Demografie,
+  </text>
+  <text x="112" y="368" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="24">
+    Alltagsnähe und ÖPNV auf einen Blick
+  </text>
+  <g transform="translate(730 160)">
+    <rect x="0" y="0" width="310" height="220" rx="24" fill="#ffffff" stroke="#bfdbfe" stroke-width="2" />
+    <text x="28" y="44" fill="#1e293b" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">
+      Scores
+    </text>
+    <g fill="none">
+      <rect x="28" y="72" width="254" height="16" rx="8" fill="#e2e8f0" />
+      <rect x="28" y="72" width="214" height="16" rx="8" fill="#2563eb" />
+      <rect x="28" y="112" width="254" height="16" rx="8" fill="#e2e8f0" />
+      <rect x="28" y="112" width="188" height="16" rx="8" fill="#0ea5e9" />
+      <rect x="28" y="152" width="254" height="16" rx="8" fill="#e2e8f0" />
+      <rect x="28" y="152" width="164" height="16" rx="8" fill="#f59e0b" />
+    </g>
+  </g>
+  <text x="112" y="492" fill="#1d4ed8" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">
+    wohnortkompass.oklabflensburg.de
+  </text>
+</svg>

@@ -15,8 +15,8 @@
       <ScoreBar label="Luft" :value="item.score_air" />
       <ScoreBar label="Sicherheit" :value="item.score_safety" />
       <ScoreBar label="Demografie" :value="item.score_demographics" />
-      <ScoreBar label="Alltagsnaehe" :value="item.score_amenities" />
-      <ScoreBar label="OEPNV" :value="item.score_oepnv" />
+      <ScoreBar label="Alltagsnähe" :value="item.score_amenities" />
+      <ScoreBar label="ÖPNV" :value="item.score_oepnv" />
     </div>
 
     <p class="mt-3 text-sm text-slate-600">{{ item.reason }}</p>
@@ -53,7 +53,7 @@
               </div>
               <p class="mt-1 text-xs text-slate-600">{{ indicator.text }}</p>
               <p v-if="indicator.quality_flag !== 'ok'" class="mt-1 text-xs text-amber-700">
-                Datenqualitaet: {{ indicator.quality_flag }}
+                Datenqualität: {{ indicator.quality_flag }}
               </p>
             </div>
           </div>
@@ -79,8 +79,8 @@ const categoryLabels: Record<string, string> = {
   air: 'Luft',
   safety: 'Sicherheit',
   demographics: 'Demografie',
-  amenities: 'Alltagsnaehe',
-  oepnv: 'OEPNV'
+  amenities: 'Alltagsnähe',
+  oepnv: 'ÖPNV'
 }
 
 function categoryLabel(category: string) {

@@ -13,11 +13,11 @@ from app.services.explanations import build_reason
 
 CATEGORY_LABELS = {
     "climate": "Klima",
-    "air": "Luftqualitaet",
+    "air": "Luftqualität",
     "safety": "Verkehrssicherheit",
     "demographics": "Demografie/Familie",
-    "amenities": "Alltagsnaehe",
-    "oepnv": "OEPNV",
+    "amenities": "Alltagsnähe",
+    "oepnv": "ÖPNV",
 }
 
 INDICATOR_LABELS = {
@@ -27,7 +27,7 @@ INDICATOR_LABELS = {
     "no2": "NO2",
     "pm10": "PM10",
     "pm25": "PM2.5",
-    "road_accidents_total": "Verkehrsunfaelle",
+    "road_accidents_total": "Verkehrsunfälle",
     "population_total_destatis": "Einwohner",
     "female_share_destatis": "Frauenanteil",
     "youth_share_destatis": "Anteil unter 18 Jahren",
@@ -35,25 +35,25 @@ INDICATOR_LABELS = {
     "amenities_density": "OSM-POI-Dichte",
     "oepnv_stop_density": "Haltestellendichte",
     "oepnv_departures_per_10k": "Abfahrtsdichte",
-    "oepnv_departure_regularity": "Regelmaessigkeit",
+    "oepnv_departure_regularity": "Regelmäßigkeit",
 }
 
 AMENITY_LABELS = {
     "pharmacy": "Apotheken",
-    "doctors": "Aerzte",
+    "doctors": "Ärzte",
     "childcare": "Kitas/Kindergarten",
     "school": "Schulen",
-    "supermarket": "Supermaerkte",
-    "station": "Bahnhoefe",
+    "supermarket": "Supermärkte",
+    "station": "Bahnhöfe",
     "transit_stop": "Haltestellen",
-    "playground": "Spielplaetze",
+    "playground": "Spielplätze",
     "park": "Parks",
     "museum": "Museen",
     "theatre": "Theater",
     "sports_facility": "Sporteinrichtungen",
     "theme_park": "Tierparks/Freizeitparks",
     "nature_reserve": "Naturschutzgebiete",
-    "airfield": "Flugplaetze",
+    "airfield": "Flugplätze",
     "restaurant": "Restaurants/Gastronomie",
     "library": "Bibliotheken",
 }
@@ -156,7 +156,7 @@ class ScoringService:
         denominator = sum(weights.values())
         if denominator == 0:
             return "Alle Gewichte sind 0, deshalb ist der Gesamtscore 0.", [
-                "Keine Kategorie fliesst in die Bewertung ein, weil alle Gewichtungen auf 0 stehen."
+                "Keine Kategorie fließt in die Bewertung ein, weil alle Gewichtungen auf 0 stehen."
             ]
 
         formula_parts = [
@@ -168,7 +168,7 @@ class ScoringService:
 
         details = [
             (
-                f"{CATEGORY_LABELS[key]} traegt mit Gewicht {weight}/{denominator} bei: "
+                f"{CATEGORY_LABELS[key]} trägt mit Gewicht {weight}/{denominator} bei: "
                 f"{category_scores[key]:.1f} x {weight} / {denominator} = "
                 f"{(category_scores[key] * weight / denominator):.1f} Punkte."
             )
@@ -186,8 +186,8 @@ class ScoringService:
         senior_share = by_key.get("senior_share_destatis")
         if region_level == "gemeinde" and not any([population_indicator, female_share, youth_share, senior_share]):
             details.append(
-                "Demografie-Indikatoren fuer diese Gemeinde sind aktuell nicht geladen. "
-                "Sobald der Regionalstatistik-Import auf Gemeindeebene erfolgreich laeuft, erscheinen hier echte Werte."
+                "Demografie-Indikatoren für diese Gemeinde sind aktuell nicht geladen. "
+                "Sobald der Regionalstatistik-Import auf Gemeindeebene erfolgreich läuft, erscheinen hier echte Werte."
             )
         if population_value is not None:
             if region_level == "gemeinde" and region_population is not None:
@@ -214,11 +214,11 @@ class ScoringService:
                     f"{ScoringService.amenity_label(category)}: {count_total} gesamt, {per_10k:.2f} je 10.000 Einwohner"
                     for category, count_total, per_10k in amenity_rows
                 ]
-                details.append("OSM-Alltagsnaehe nach Kategorien: " + "; ".join(amenity_parts) + ".")
+                details.append("OSM-Alltagsnähe nach Kategorien: " + "; ".join(amenity_parts) + ".")
             else:
                 details.append(
-                    "Alltagsnaehe basiert aktuell auf der aggregierten OSM-POI-Dichte. "
-                    "Separate Apotheken- oder Aerztezahlen werden angezeigt, sobald `import_osm` erneut gelaufen ist."
+                    "Alltagsnähe basiert aktuell auf der aggregierten OSM-POI-Dichte. "
+                    "Separate Apotheken- oder Ärztezahlen werden angezeigt, sobald `import_osm` erneut gelaufen ist."
                 )
 
         return score_formula, details

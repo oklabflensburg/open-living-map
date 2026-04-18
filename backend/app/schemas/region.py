@@ -45,6 +45,19 @@ class AccidentStat(BaseModel):
     count_total: int
 
 
+class AirStationInfo(BaseModel):
+    indicator_key: str
+    label: str
+    raw_value: float | None = None
+    station_id: str
+    station_code: str | None = None
+    station_name: str
+    latitude: float | None = None
+    longitude: float | None = None
+    station_page_url: str | None = None
+    measures_url: str
+
+
 class RegionDetailResponse(BaseModel):
     region: RegionBase
     scores: dict[str, float]
@@ -52,6 +65,7 @@ class RegionDetailResponse(BaseModel):
     source_links: list[str]
     amenity_stats: list[AmenityStat] = []
     accident_stats: list[AccidentStat] = []
+    air_stations: list[AirStationInfo] = []
     geometry: dict[str, Any] | None = None
     score_formula: str = ""
     calculation_details: list[str] = []
