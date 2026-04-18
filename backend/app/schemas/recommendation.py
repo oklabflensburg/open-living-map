@@ -38,7 +38,9 @@ class RecommendationItem(BaseModel):
     reason: str
     score_formula: str = ""
     calculation_details: list[str] = Field(default_factory=list)
-    indicators: list[RecommendationIndicatorDetail] = Field(default_factory=list)
+    indicators: list[RecommendationIndicatorDetail] = Field(
+        default_factory=list
+    )
 
 
 class RecommendationResponse(BaseModel):

@@ -1,22 +1,10 @@
 <template>
   <form class="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm" @submit.prevent="$emit('submit')">
-    <div class="space-y-2">
-      <label class="font-medium" for="state-select">Bundesland</label>
-      <select
-        id="state-select"
-        :value="modelValue.state_code || ''"
-        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-        @change="onStateChange"
-      >
-        <option value="">Deutschlandweit</option>
-        <option v-for="state in states" :key="state.code" :value="state.code">
-          {{ state.name }}
-        </option>
-      </select>
-      <p class="text-xs text-slate-500">
-        Die Empfehlungen werden nur innerhalb des gewählten Bundeslands berechnet.
-      </p>
-    </div>
+    <StateSelect
+      :model-value="modelValue.state_code"
+      hint="Die Empfehlungen werden nur innerhalb des gewählten Bundeslands berechnet."
+      @update:model-value="onStateChange"
+    />
 
     <div v-for="field in fields" :key="field.key" class="space-y-3 rounded-xl border p-4" :class="field.cardClass">
       <div class="flex items-center justify-between">
@@ -48,6 +36,7 @@
 </template>
 
 <script setup lang="ts">
+import StateSelect from '~/components/StateSelect.vue'
 import type { RecommendationInput } from '~/types/api'
 
 const props = defineProps<{ modelValue: RecommendationInput }>()
@@ -55,25 +44,6 @@ const emit = defineEmits<{
   'update:modelValue': [value: RecommendationInput]
   submit: []
 }>()
-
-const states = [
-  { code: '08', name: 'Baden-Württemberg' },
-  { code: '09', name: 'Bayern' },
-  { code: '11', name: 'Berlin' },
-  { code: '12', name: 'Brandenburg' },
-  { code: '04', name: 'Bremen' },
-  { code: '02', name: 'Hamburg' },
-  { code: '06', name: 'Hessen' },
-  { code: '13', name: 'Mecklenburg-Vorpommern' },
-  { code: '03', name: 'Niedersachsen' },
-  { code: '05', name: 'Nordrhein-Westfalen' },
-  { code: '07', name: 'Rheinland-Pfalz' },
-  { code: '10', name: 'Saarland' },
-  { code: '14', name: 'Sachsen' },
-  { code: '15', name: 'Sachsen-Anhalt' },
-  { code: '01', name: 'Schleswig-Holstein' },
-  { code: '16', name: 'Thüringen' }
-]
 
 const fields: Array<{
   key: keyof Omit<RecommendationInput, 'state_code'>
@@ -134,11 +104,10 @@ function onInput(key: keyof Omit<RecommendationInput, 'state_code'>, event: Even
   })
 }
 
-function onStateChange(event: Event) {
-  const target = event.target as HTMLSelectElement
+function onStateChange(value: string | null) {
   emit('update:modelValue', {
     ...props.modelValue,
-    state_code: target.value || null
+    state_code: value
   })
 }
 </script>

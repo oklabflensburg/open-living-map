@@ -1,4 +1,5 @@
 import type { RecommendationInput, RecommendationResponse } from '~/types/api'
+import type { RankingCategory } from '~/composables/useRankingCategories'
 
 export function useRecommendations() {
   const { apiFetch } = useApi()
@@ -14,5 +15,23 @@ export function useRecommendations() {
     return await apiFetch<RecommendationResponse>(`/compare?ars=${encodeURIComponent(ars.join(','))}`)
   }
 
-  return { fetchRecommendations, fetchCompare }
+  const fetchTopRankings = async (
+    category: RankingCategory,
+    stateCode: string | null,
+    limit = 100
+  ): Promise<RecommendationResponse> => {
+    const params = new URLSearchParams({
+      limit: String(limit)
+    })
+
+    if (stateCode) {
+      params.set('state_code', stateCode)
+    }
+
+    return await apiFetch<RecommendationResponse>(
+      `/rankings/top/${encodeURIComponent(category)}?${params.toString()}`
+    )
+  }
+
+  return { fetchRecommendations, fetchCompare, fetchTopRankings }
 }

@@ -2,6 +2,28 @@ type RegionListItem = {
   slug: string
 }
 
+const rankingScopes = [
+  'deutschland',
+  'schleswig-holstein',
+  'hamburg',
+  'niedersachsen',
+  'bremen',
+  'nordrhein-westfalen',
+  'hessen',
+  'rheinland-pfalz',
+  'baden-wuerttemberg',
+  'bayern',
+  'saarland',
+  'berlin',
+  'brandenburg',
+  'mecklenburg-vorpommern',
+  'sachsen',
+  'sachsen-anhalt',
+  'thueringen'
+]
+
+const rankingCategories = ['climate', 'air', 'safety', 'demographics', 'amenities', 'oepnv']
+
 type RegionListResponse = {
   items: RegionListItem[]
 }
@@ -39,6 +61,17 @@ export default defineEventHandler(async (event) => {
     { loc: toAbsoluteUrl(siteUrl, '/finder'), changefreq: 'weekly', priority: '0.9', lastmod: today },
     { loc: toAbsoluteUrl(siteUrl, '/methodik'), changefreq: 'monthly', priority: '0.7', lastmod: today }
   ]
+
+  for (const scope of rankingScopes) {
+    for (const category of rankingCategories) {
+      urls.push({
+        loc: toAbsoluteUrl(siteUrl, `/top-100/${scope}/${category}`),
+        changefreq: 'weekly',
+        priority: '0.6',
+        lastmod: today
+      })
+    }
+  }
 
   const regionsEndpoint = apiBase.startsWith('http') ? `${apiBase}/regions` : toAbsoluteUrl(siteUrl, `${apiBase}/regions`)
 

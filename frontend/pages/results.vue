@@ -1,13 +1,20 @@
 <template>
   <section>
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div class="mb-6 flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold">Top Empfehlungen</h1>
         <p class="text-sm text-slate-500">
           Auswahl: {{ selectedStateName }}
         </p>
       </div>
-      <NuxtLink to="/finder" class="text-sm font-semibold text-blue-700">Gewichte anpassen</NuxtLink>
+      <div class="w-full max-w-sm space-y-3">
+        <StateSelect
+          :model-value="store.state_code"
+          hint="Die Empfehlungen werden nur innerhalb des gewählten Bundeslands berechnet."
+          @update:model-value="onStateChange"
+        />
+        <NuxtLink to="/finder" class="inline-block text-sm font-semibold text-blue-700">Gewichte anpassen</NuxtLink>
+      </div>
     </div>
 
     <div class="mb-6">
@@ -25,6 +32,8 @@
 <script setup lang="ts">
 import RegionCard from '~/components/RegionCard.vue'
 import RegionMap from '~/components/RegionMap.vue'
+import StateSelect from '~/components/StateSelect.vue'
+import { getGermanStateName } from '~/composables/useGermanStates'
 import { usePreferencesStore } from '~/stores/preferences'
 import type { RecommendationResponse } from '~/types/api'
 
@@ -52,31 +61,25 @@ useSeoMeta({
   twitterCard: 'summary'
 })
 
-const states = [
-  { code: '01', name: 'Schleswig-Holstein' },
-  { code: '02', name: 'Hamburg' },
-  { code: '03', name: 'Niedersachsen' },
-  { code: '04', name: 'Bremen' },
-  { code: '05', name: 'Nordrhein-Westfalen' },
-  { code: '06', name: 'Hessen' },
-  { code: '07', name: 'Rheinland-Pfalz' },
-  { code: '08', name: 'Baden-Württemberg' },
-  { code: '09', name: 'Bayern' },
-  { code: '10', name: 'Saarland' },
-  { code: '11', name: 'Berlin' },
-  { code: '12', name: 'Brandenburg' },
-  { code: '13', name: 'Mecklenburg-Vorpommern' },
-  { code: '14', name: 'Sachsen' },
-  { code: '15', name: 'Sachsen-Anhalt' },
-  { code: '16', name: 'Thüringen' }
-]
+const selectedStateName = computed(() => getGermanStateName(store.state_code))
 
-const selectedStateName = computed(() => {
-  if (!store.state_code) {
-    return 'Deutschlandweit'
+async function loadRecommendations() {
+  pending.value = true
+  error.value = ''
+
+  try {
+    response.value = await fetchRecommendations({ ...store.$state })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Unbekannter Fehler'
+  } finally {
+    pending.value = false
   }
-  return states.find((state) => state.code === store.state_code)?.name || 'Unbekanntes Bundesland'
-})
+}
+
+async function onStateChange(value: string | null) {
+  store.setStateCode(value)
+  await loadRecommendations()
+}
 
 useHead(() => {
   const items = (response.value?.items || []).slice(0, 10)
@@ -124,13 +127,5 @@ useHead(() => {
   }
 })
 
-onMounted(async () => {
-  try {
-    response.value = await fetchRecommendations({ ...store.$state })
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unbekannter Fehler'
-  } finally {
-    pending.value = false
-  }
-})
+onMounted(loadRecommendations)
 </script>

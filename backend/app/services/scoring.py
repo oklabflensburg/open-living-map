@@ -98,8 +98,29 @@ class ScoringService:
         denominator = sum(weights.values())
         if denominator == 0:
             return 0.0
-        numerator = sum(category_scores[key] * weight for key, weight in weights.items())
+        numerator = sum(
+            category_scores[key] * weight for key, weight in weights.items()
+        )
         return round(numerator / denominator, 2)
+
+    @staticmethod
+    def preferences_for_category(
+        category: str,
+        state_code: str | None = None,
+    ) -> RecommendationInput:
+        weights = {
+            'climate_weight': 0,
+            'air_weight': 0,
+            'safety_weight': 0,
+            'demographics_weight': 0,
+            'amenities_weight': 0,
+            'oepnv_weight': 0,
+        }
+        weight_key = f'{category}_weight'
+        if weight_key not in weights:
+            raise ValueError(f'Unknown category: {category}')
+        weights[weight_key] = 5
+        return RecommendationInput(**weights, state_code=state_code)
 
     def _persist_preference_session(self, preferences: RecommendationInput) -> None:
         row = UserPreferenceSession(
@@ -278,9 +299,16 @@ class ScoringService:
         self,
         preferences: RecommendationInput,
         include_ars: list[str] | None = None,
+        limit: int = 10,
+        include_details: bool = True,
+        persist_session: bool = True,
     ) -> RecommendationResponse:
-        self._persist_preference_session(preferences)
-        rows = self.repository.list_snapshots(include_ars=include_ars, state_code=preferences.state_code)
+        if persist_session:
+            self._persist_preference_session(preferences)
+        rows = self.repository.list_snapshots(
+            include_ars=include_ars,
+            state_code=preferences.state_code,
+        )
 
         items: list[RecommendationItem] = []
         for region, snapshot in rows:
@@ -313,7 +341,9 @@ class ScoringService:
 
         items.sort(key=lambda item: item.score_total, reverse=True)
         if not include_ars:
-            items = items[:10]
+            items = items[:limit]
+        if not include_details:
+            return RecommendationResponse(items=items)
         for item in items:
             row = next(region for region, _ in rows if region.ars == item.ars)
             category_scores = {
@@ -336,3 +366,18 @@ class ScoringService:
             item.calculation_details = calculation_details
             item.indicators = indicators
         return RecommendationResponse(items=items)
+
+    def get_top_rankings(
+        self,
+        *,
+        state_code: str | None,
+        category: str,
+        limit: int = 100,
+    ) -> RecommendationResponse:
+        preferences = self.preferences_for_category(category, state_code)
+        return self.get_recommendations(
+            preferences,
+            limit=limit,
+            include_details=False,
+            persist_session=False,
+        )
