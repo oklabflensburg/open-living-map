@@ -5,18 +5,54 @@
         <h3 class="text-lg font-semibold">{{ item.name }}</h3>
         <p class="text-xs text-slate-500">AGS: {{ item.ars }}</p>
       </div>
-      <span class="rounded bg-blue-100 px-2 py-1 text-sm font-semibold text-blue-800">
+      <span class="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-800">
         {{ item.score_total.toFixed(1) }}
       </span>
     </div>
 
     <div class="space-y-2">
-      <ScoreBar label="Klima" :value="item.score_climate" />
-      <ScoreBar label="Luft" :value="item.score_air" />
-      <ScoreBar label="Sicherheit" :value="item.score_safety" />
-      <ScoreBar label="Demografie" :value="item.score_demographics" />
-      <ScoreBar label="Alltagsnähe" :value="item.score_amenities" />
-      <ScoreBar label="ÖPNV" :value="item.score_oepnv" />
+      <ScoreBar
+        label="Klima"
+        :value="item.score_climate"
+        card-class="border-amber-200 bg-amber-50/70"
+        badge-class="bg-amber-100 text-amber-800"
+        bar-class="bg-amber-600"
+      />
+      <ScoreBar
+        label="Luft"
+        :value="item.score_air"
+        card-class="border-sky-200 bg-sky-50/70"
+        badge-class="bg-sky-100 text-sky-800"
+        bar-class="bg-sky-600"
+      />
+      <ScoreBar
+        label="Sicherheit"
+        :value="item.score_safety"
+        card-class="border-rose-200 bg-rose-50/70"
+        badge-class="bg-rose-100 text-rose-800"
+        bar-class="bg-rose-600"
+      />
+      <ScoreBar
+        label="Demografie"
+        :value="item.score_demographics"
+        card-class="border-violet-200 bg-violet-50/70"
+        badge-class="bg-violet-100 text-violet-800"
+        bar-class="bg-violet-600"
+      />
+      <ScoreBar
+        label="Alltagsnähe"
+        :value="item.score_amenities"
+        card-class="border-emerald-200 bg-emerald-50/70"
+        badge-class="bg-emerald-100 text-emerald-800"
+        bar-class="bg-emerald-600"
+      />
+      <ScoreBar
+        label="ÖPNV"
+        :value="item.score_oepnv"
+        card-class="border-indigo-200 bg-indigo-50/70"
+        badge-class="bg-indigo-100 text-indigo-800"
+        bar-class="bg-indigo-600"
+      />
     </div>
 
     <p class="mt-3 text-sm text-slate-600">{{ item.reason }}</p>
@@ -45,13 +81,19 @@
             <div
               v-for="indicator in item.indicators"
               :key="indicator.key"
-              class="rounded border border-slate-200 bg-white p-2"
+              class="rounded-lg border p-2"
+              :class="indicatorCategoryTheme(indicator.category).cardClass"
             >
               <div class="flex items-start justify-between gap-3">
                 <p class="font-medium">{{ indicator.name }}</p>
-                <span class="text-xs text-slate-500">{{ categoryLabel(indicator.category) }}</span>
+                <span
+                  class="rounded-full px-2 py-0.5 text-xs font-semibold"
+                  :class="indicatorCategoryTheme(indicator.category).badgeClass"
+                >
+                  {{ categoryLabel(indicator.category) }}
+                </span>
               </div>
-              <p class="mt-1 text-xs text-slate-600">{{ indicator.text }}</p>
+              <p class="mt-1 text-xs text-slate-700">{{ indicator.text }}</p>
               <p v-if="indicator.quality_flag !== 'ok'" class="mt-1 text-xs text-amber-700">
                 Datenqualität: {{ indicator.quality_flag }}
               </p>
@@ -76,14 +118,48 @@ defineProps<{ item: RecommendationItem }>()
 
 const categoryLabels: Record<string, string> = {
   climate: 'Klima',
-  air: 'Luft',
-  safety: 'Sicherheit',
-  demographics: 'Demografie',
+  air: 'Luftqualität',
+  safety: 'Verkehrssicherheit',
+  demographics: 'Demografie/Familie',
   amenities: 'Alltagsnähe',
   oepnv: 'ÖPNV'
 }
 
+const categoryThemes: Record<string, { cardClass: string; badgeClass: string }> = {
+  climate: {
+    cardClass: 'border-amber-200 bg-amber-50/70',
+    badgeClass: 'bg-amber-100 text-amber-800'
+  },
+  air: {
+    cardClass: 'border-sky-200 bg-sky-50/70',
+    badgeClass: 'bg-sky-100 text-sky-800'
+  },
+  safety: {
+    cardClass: 'border-rose-200 bg-rose-50/70',
+    badgeClass: 'bg-rose-100 text-rose-800'
+  },
+  demographics: {
+    cardClass: 'border-violet-200 bg-violet-50/70',
+    badgeClass: 'bg-violet-100 text-violet-800'
+  },
+  amenities: {
+    cardClass: 'border-emerald-200 bg-emerald-50/70',
+    badgeClass: 'bg-emerald-100 text-emerald-800'
+  },
+  oepnv: {
+    cardClass: 'border-indigo-200 bg-indigo-50/70',
+    badgeClass: 'bg-indigo-100 text-indigo-800'
+  }
+}
+
 function categoryLabel(category: string) {
   return categoryLabels[category] || category
+}
+
+function indicatorCategoryTheme(category: string) {
+  return categoryThemes[category] || {
+    cardClass: 'border-slate-200 bg-white',
+    badgeClass: 'bg-slate-100 text-slate-700'
+  }
 }
 </script>

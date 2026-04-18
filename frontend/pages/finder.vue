@@ -37,16 +37,24 @@
     <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 class="mb-4 text-lg font-semibold">Welche Werte dahinterstehen</h2>
       <div class="grid gap-4 md:grid-cols-2">
-        <article v-for="item in categoryDetails" :key="item.key" class="rounded border border-slate-200 p-4">
-          <h3 class="font-semibold">{{ item.title }}</h3>
-          <p class="mt-1 text-sm text-slate-600">{{ item.description }}</p>
-          <p class="mt-2 text-xs text-slate-500">Indikatoren: {{ item.indicators.join(', ') }}</p>
-          <p class="mt-1 text-xs text-slate-500">Richtung: {{ item.direction }}</p>
+        <article
+          v-for="item in categoryDetails"
+          :key="item.key"
+          class="rounded-xl border p-4 shadow-sm"
+          :class="item.cardClass"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wide" :class="item.kickerClass">{{ item.kicker }}</p>
+          <h3 class="mt-2 font-semibold text-slate-900">{{ item.title }}</h3>
+          <p class="mt-1 text-sm text-slate-700">{{ item.description }}</p>
+          <p class="mt-3 text-xs font-medium text-slate-500">Enthaltene Kennzahlen</p>
+          <p class="mt-1 text-sm text-slate-700">{{ item.indicators.join(', ') }}</p>
+          <p class="mt-3 text-xs font-medium text-slate-500">Bewertungslogik</p>
+          <p class="mt-1 text-sm text-slate-700">{{ item.direction }}</p>
         </article>
       </div>
 
       <p class="mt-4 text-xs text-slate-500">
-        Hinweis: Alle Indikatoren werden auf 0..100 normiert. Danach wird pro Kategorie gemittelt und anschließend
+        Hinweis: Alle Indikatoren werden auf 0 bis 100 normiert. Danach wird pro Kategorie gemittelt und anschließend
         mit deinen Gewichten verrechnet.
       </p>
     </div>
@@ -147,44 +155,62 @@ const effectiveWeights = computed(() => {
 const categoryDetails = [
   {
     key: 'climate',
+    kicker: 'Kategorie',
+    kickerClass: 'text-amber-700',
+    cardClass: 'border-amber-200 bg-amber-50/70',
     title: 'Klima',
     description: 'Klimatische Belastung und Niederschlag auf Kreisebene (DWD).',
-    indicators: ['heat_days', 'summer_days', 'precipitation_proxy'],
-    direction: 'Weniger Hitzetage besser, mehr Niederschlag/Sommertage je nach Indikator.'
+    indicators: ['Hitzetage', 'Sommertage', 'Niederschlags-Proxy'],
+    direction: 'Weniger Hitzetage sind besser. Die übrigen Klimaindikatoren werden je nach fachlicher Richtung bewertet.'
   },
   {
     key: 'air',
+    kicker: 'Kategorie',
+    kickerClass: 'text-sky-700',
+    cardClass: 'border-sky-200 bg-sky-50/70',
     title: 'Luftqualität',
     description: 'Luftschadstoffe aus UBA-Stationen, auf Kreise aggregiert.',
-    indicators: ['no2', 'pm10', 'pm25'],
+    indicators: ['Stickstoffdioxid (NO₂)', 'Feinstaub PM10', 'Feinstaub PM2.5'],
     direction: 'Niedriger ist besser.'
   },
   {
     key: 'safety',
+    kicker: 'Kategorie',
+    kickerClass: 'text-rose-700',
+    cardClass: 'border-rose-200 bg-rose-50/70',
     title: 'Verkehrssicherheit',
     description: 'Unfallatlas-Unfallorte pro Kreis (Destatis).',
-    indicators: ['road_accidents_total'],
+    indicators: ['Verkehrsunfälle gesamt'],
     direction: 'Niedriger ist besser.'
   },
   {
     key: 'demographics',
+    kicker: 'Kategorie',
+    kickerClass: 'text-violet-700',
+    cardClass: 'border-violet-200 bg-violet-50/70',
     title: 'Demografie/Familie',
     description: 'Kreisindikatoren aus GENESIS (Bevölkerung, Altersstruktur, Geschlechteranteil).',
-    indicators: ['population_total_destatis', 'female_share_destatis', 'youth_share_destatis', 'senior_share_destatis'],
-    direction: 'Je nach Kennzahl höher oder niedriger besser.'
+    indicators: ['Einwohner gesamt', 'Frauenanteil', 'Anteil unter 18 Jahren', 'Anteil ab 65 Jahren'],
+    direction: 'Die Richtung hängt von der jeweiligen Kennzahl ab; nicht alle demografischen Werte werden gleich interpretiert.'
   },
   {
     key: 'amenities',
+    kicker: 'Kategorie',
+    kickerClass: 'text-emerald-700',
+    cardClass: 'border-emerald-200 bg-emerald-50/70',
     title: 'Alltagsnähe',
     description: 'POI-Dichte aus OSM je Kreis.',
-    indicators: ['amenities_density'],
+    indicators: ['Dichte alltagsrelevanter Einrichtungen'],
     direction: 'Höher ist besser.'
   },
   {
     key: 'oepnv',
+    kicker: 'Kategorie',
+    kickerClass: 'text-indigo-700',
+    cardClass: 'border-indigo-200 bg-indigo-50/70',
     title: 'ÖPNV',
     description: 'ÖPNV-Haltestellen, Abfahrtsdichte und Regelmäßigkeit aus GTFS.',
-    indicators: ['oepnv_stop_density', 'oepnv_departures_per_10k', 'oepnv_departure_regularity'],
+    indicators: ['Haltestellendichte', 'Abfahrten je 10.000 Einwohner', 'Regelmäßigkeit des Angebots'],
     direction: 'Höher ist besser.'
   }
 ]

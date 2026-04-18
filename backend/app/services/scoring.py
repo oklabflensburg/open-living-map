@@ -38,6 +38,23 @@ INDICATOR_LABELS = {
     "oepnv_departure_regularity": "Regelmäßigkeit",
 }
 
+UNIT_LABELS = {
+    "percent": "Prozent",
+    "count": "Anzahl",
+    "ug/m3": "µg/m³",
+    "mm": "mm",
+    "per_10k": "je 10.000 Einwohner",
+    "departures_per_10k": "Abfahrten je 10.000 Einwohner",
+    "stops_per_10k": "Haltestellen je 10.000 Einwohner",
+    "index_0_100": "Index von 0 bis 100",
+}
+
+QUALITY_FLAG_LABELS = {
+    "ok": "ohne besonderen Hinweis",
+    "nearest_station_proxy": "Proxy aus nächstgelegener Messstation",
+    "low_coverage": "geringe Abdeckung",
+}
+
 AMENITY_LABELS = {
     "pharmacy": "Apotheken",
     "doctors": "Ärzte",
@@ -115,10 +132,23 @@ class ScoringService:
             return f"{value:,.0f}".replace(",", ".")
         return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+    @staticmethod
+    def localized_indicator_name(key: str, fallback: str | None = None) -> str:
+        return INDICATOR_LABELS.get(key, fallback or key)
+
+    @staticmethod
+    def localized_unit(unit: str) -> str:
+        return UNIT_LABELS.get(unit, unit)
+
+    @staticmethod
+    def localized_quality_flag(flag: str) -> str:
+        return QUALITY_FLAG_LABELS.get(flag, flag)
+
     def _indicator_text(self, key: str, raw_value: float, normalized_value: float, unit: str) -> str:
-        label = INDICATOR_LABELS.get(key, key)
+        label = self.localized_indicator_name(key)
         formatted = self._format_value(raw_value, unit)
-        return f"{label}: Rohwert {formatted} ({unit}), normierter Score {normalized_value:.1f}/100."
+        localized_unit = self.localized_unit(unit)
+        return f"{label}: Rohwert {formatted} ({localized_unit}), normierter Teil-Score {normalized_value:.1f} von 100."
 
     def _build_indicator_details(self, region_id: int) -> list[RecommendationIndicatorDetail]:
         details: list[RecommendationIndicatorDetail] = []
@@ -126,12 +156,12 @@ class ScoringService:
             details.append(
                 RecommendationIndicatorDetail(
                     key=definition.key,
-                    name=definition.name,
+                    name=self.localized_indicator_name(definition.key, definition.name),
                     category=definition.category,
                     unit=definition.unit,
                     raw_value=value.raw_value,
                     normalized_value=value.normalized_value,
-                    quality_flag=value.quality_flag,
+                    quality_flag=self.localized_quality_flag(value.quality_flag),
                     text=self._indicator_text(
                         definition.key,
                         value.raw_value,

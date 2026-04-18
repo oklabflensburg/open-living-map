@@ -15,17 +15,24 @@
       </div>
     </div>
 
-    <div class="grid gap-3 rounded-xl border border-slate-200 bg-white p-6 md:grid-cols-2">
-      <ScoreBar label="Gesamt" :value="detail.scores.total || 0" />
-      <ScoreBar label="Klima" :value="detail.scores.climate || 0" />
-      <ScoreBar label="Luft" :value="detail.scores.air || 0" />
-      <ScoreBar label="Sicherheit" :value="detail.scores.safety || 0" />
-      <ScoreBar label="Demografie" :value="detail.scores.demographics || 0" />
-      <ScoreBar label="Alltagsnähe" :value="detail.scores.amenities || 0" />
-      <ScoreBar label="ÖPNV" :value="detail.scores.oepnv || 0" />
+    <div class="grid gap-3 md:grid-cols-2">
+      <ScoreBar label="Gesamt" :value="detail.scores.total || 0" card-class="border-slate-300 bg-slate-100"
+        badge-class="bg-slate-800 text-white" bar-class="bg-slate-800" />
+      <ScoreBar label="Klima" :value="detail.scores.climate || 0" card-class="border-amber-200 bg-amber-50/70"
+        badge-class="bg-amber-100 text-amber-800" bar-class="bg-amber-600" />
+      <ScoreBar label="Luft" :value="detail.scores.air || 0" card-class="border-sky-200 bg-sky-50/70"
+        badge-class="bg-sky-100 text-sky-800" bar-class="bg-sky-600" />
+      <ScoreBar label="Sicherheit" :value="detail.scores.safety || 0" card-class="border-rose-200 bg-rose-50/70"
+        badge-class="bg-rose-100 text-rose-800" bar-class="bg-rose-600" />
+      <ScoreBar label="Demografie" :value="detail.scores.demographics || 0" card-class="border-violet-200 bg-violet-50/70"
+        badge-class="bg-violet-100 text-violet-800" bar-class="bg-violet-600" />
+      <ScoreBar label="Alltagsnähe" :value="detail.scores.amenities || 0" card-class="border-emerald-200 bg-emerald-50/70"
+        badge-class="bg-emerald-100 text-emerald-800" bar-class="bg-emerald-600" />
+      <ScoreBar label="ÖPNV" :value="detail.scores.oepnv || 0" card-class="border-indigo-200 bg-indigo-50/70"
+        badge-class="bg-indigo-100 text-indigo-800" bar-class="bg-indigo-600" />
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6">
+    <div class="rounded-xl border border-violet-200 bg-violet-50/60 p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 class="text-lg font-semibold">Demografie gesamt</h2>
@@ -35,7 +42,7 @@
 
       <div v-if="demographicStats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <article v-for="item in demographicStats" :key="item.label"
-          class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          class="rounded-lg border border-violet-200 bg-white/80 p-4">
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">{{ item.value }}</p>
           <p v-if="item.note" class="mt-1 text-xs text-slate-500">{{ item.note }}</p>
@@ -46,7 +53,7 @@
       </p>
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6">
+    <div class="rounded-xl border border-sky-200 bg-sky-50/60 p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 class="text-lg font-semibold">Luftdaten-Stationen</h2>
@@ -92,7 +99,7 @@
       </p>
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6">
+    <div class="rounded-xl border border-emerald-200 bg-emerald-50/60 p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 class="text-lg font-semibold">OSM-Alltagsnähe</h2>
@@ -103,12 +110,12 @@
       <div v-if="detail.amenity_stats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <article v-for="item in detail.amenity_stats" :key="item.category"
           class="cursor-pointer rounded-lg border p-4 transition" :class="selectedAmenityCategory === item.category
-              ? 'border-amber-400 bg-amber-50'
-              : 'border-slate-200 bg-slate-50 hover:border-amber-300 hover:bg-amber-50/50'
+            ? 'border-emerald-400 bg-emerald-100'
+            : 'border-emerald-200 bg-white/80 hover:border-emerald-300 hover:bg-emerald-50/80'
             " @click="toggleAmenityPois(item.category)">
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(item.count_total) }}</p>
-          <p class="mt-3 text-xs font-medium text-amber-700">
+          <p class="mt-3 text-xs font-medium text-emerald-700">
             {{ selectedAmenityCategory === item.category ? 'POIs auf Karte ausblenden' : 'POIs auf Karte anzeigen' }}
           </p>
         </article>
@@ -118,7 +125,7 @@
       </p>
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6">
+    <div class="rounded-xl border border-rose-200 bg-rose-50/60 p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 class="text-lg font-semibold">Verkehrsunfälle</h2>
@@ -129,8 +136,8 @@
       <div v-if="detail.accident_stats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <article v-for="item in detail.accident_stats" :key="item.category"
           class="cursor-pointer rounded-lg border p-4 transition" :class="selectedAccidentCategory === item.category
-              ? 'border-rose-400 bg-rose-50'
-              : 'border-slate-200 bg-slate-50 hover:border-rose-300 hover:bg-rose-50/50'
+            ? 'border-rose-400 bg-rose-100'
+            : 'border-rose-200 bg-white/80 hover:border-rose-300 hover:bg-rose-50/80'
             " @click="toggleAccidentPois(item.category)">
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(item.count_total) }}</p>
@@ -145,7 +152,7 @@
       </p>
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6">
+    <div class="rounded-xl border border-sky-200 bg-white p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 class="text-lg font-semibold">Gemeindegrenze</h2>
@@ -189,12 +196,16 @@
         <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Rohdaten und normierte Teil-Scores</p>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           <article v-for="indicator in detail.indicators" :key="indicator.key"
-            class="rounded-lg border border-slate-200 bg-white p-3">
+            class="rounded-lg border p-3 shadow-sm"
+            :class="indicatorCategoryTheme(indicator.category).cardClass">
             <div class="flex items-start justify-between gap-3">
-              <h3 class="font-medium">{{ indicator.name }}</h3>
-              <span class="text-xs text-slate-500">{{ categoryLabel(indicator.category) }}</span>
+              <h3 class="font-medium text-slate-900">{{ indicator.name }}</h3>
+              <span class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                :class="indicatorCategoryTheme(indicator.category).badgeClass">
+                {{ categoryLabel(indicator.category) }}
+              </span>
             </div>
-            <p class="mt-1 text-sm text-slate-600">{{ indicator.text }}</p>
+            <p class="mt-1 text-sm text-slate-700">{{ indicator.text }}</p>
             <p v-if="indicator.quality_flag !== 'ok'" class="mt-1 text-xs text-amber-700">
               Datenqualität: {{ indicator.quality_flag }}
             </p>
@@ -328,15 +339,49 @@ useHead(() => {
 
 const categoryLabels: Record<string, string> = {
   climate: 'Klima',
-  air: 'Luft',
-  safety: 'Sicherheit',
-  demographics: 'Demografie',
+  air: 'Luftqualität',
+  safety: 'Verkehrssicherheit',
+  demographics: 'Demografie/Familie',
   amenities: 'Alltagsnähe',
   oepnv: 'ÖPNV'
 }
 
+const categoryThemes: Record<string, { cardClass: string; badgeClass: string }> = {
+  climate: {
+    cardClass: 'border-amber-200 bg-amber-50/70',
+    badgeClass: 'bg-amber-100 text-amber-800'
+  },
+  air: {
+    cardClass: 'border-sky-200 bg-sky-50/70',
+    badgeClass: 'bg-sky-100 text-sky-800'
+  },
+  safety: {
+    cardClass: 'border-rose-200 bg-rose-50/70',
+    badgeClass: 'bg-rose-100 text-rose-800'
+  },
+  demographics: {
+    cardClass: 'border-violet-200 bg-violet-50/70',
+    badgeClass: 'bg-violet-100 text-violet-800'
+  },
+  amenities: {
+    cardClass: 'border-emerald-200 bg-emerald-50/70',
+    badgeClass: 'bg-emerald-100 text-emerald-800'
+  },
+  oepnv: {
+    cardClass: 'border-indigo-200 bg-indigo-50/70',
+    badgeClass: 'bg-indigo-100 text-indigo-800'
+  }
+}
+
 function categoryLabel(category: string) {
   return categoryLabels[category] || category
+}
+
+function indicatorCategoryTheme(category: string) {
+  return categoryThemes[category] || {
+    cardClass: 'border-slate-200 bg-white',
+    badgeClass: 'bg-slate-100 text-slate-700'
+  }
 }
 
 function formatCount(value: number) {

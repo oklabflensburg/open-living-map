@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .rounded-2xl {
+    border-radius: 0.8rem;
+  }
+
+  .rounded-xl {
+    border-radius: 0.65rem;
+  }
+
+  .rounded-lg {
+    border-radius: 0.5rem;
+  }
+}
