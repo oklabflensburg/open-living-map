@@ -48,6 +48,14 @@ AMENITY_LABELS = {
     "transit_stop": "Haltestellen",
     "playground": "Spielplaetze",
     "park": "Parks",
+    "museum": "Museen",
+    "theatre": "Theater",
+    "sports_facility": "Sporteinrichtungen",
+    "theme_park": "Tierparks/Freizeitparks",
+    "nature_reserve": "Naturschutzgebiete",
+    "airfield": "Flugplaetze",
+    "restaurant": "Restaurants/Gastronomie",
+    "library": "Bibliotheken",
 }
 
 

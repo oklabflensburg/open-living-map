@@ -21,18 +21,57 @@ logger = logging.getLogger("etl.import_osm")
 logging.basicConfig(level=logging.INFO)
 
 CATEGORY_MAPPING = {
-    "pharmacy": "amenity=pharmacy",
-    "doctors": "amenity=doctors",
-    "childcare": "amenity=kindergarten",
-    "school": "amenity=school",
-    "supermarket": "shop=supermarket",
-    "station": "railway=station",
-    "transit_stop": "highway=bus_stop",
-    "playground": "leisure=playground",
-    "park": "leisure=park",
+    "pharmacy": [("amenity", "pharmacy")],
+    "doctors": [("amenity", "doctors")],
+    "childcare": [("amenity", "kindergarten")],
+    "school": [("amenity", "school")],
+    "supermarket": [("shop", "supermarket")],
+    "station": [("railway", "station")],
+    "transit_stop": [("highway", "bus_stop")],
+    "playground": [("leisure", "playground")],
+    "park": [("leisure", "park")],
+    "museum": [("tourism", "museum")],
+    "theatre": [("amenity", "theatre")],
+    "sports_facility": [
+        ("leisure", "sports_centre"),
+        ("leisure", "stadium"),
+        ("leisure", "swimming_pool"),
+        ("sport", "swimming"),
+    ],
+    "theme_park": [("tourism", "zoo"), ("tourism", "theme_park")],
+    "nature_reserve": [("leisure", "nature_reserve"), ("boundary", "protected_area")],
+    "airfield": [("aeroway", "aerodrome")],
+    "restaurant": [
+        ("amenity", "restaurant"),
+        ("amenity", "cafe"),
+        ("amenity", "bar"),
+        ("amenity", "pub"),
+        ("amenity", "fast_food"),
+    ],
+    "library": [("amenity", "library")],
 }
 
-OSM_TAG_COLUMNS = sorted({tag.split("=", 1)[0] for tag in CATEGORY_MAPPING.values()})
+OSM_TAG_COLUMNS = sorted(
+    {
+        osm_key
+        for mappings in CATEGORY_MAPPING.values()
+        for osm_key, _ in mappings
+    }
+)
+
+
+def _build_tag_match_condition(alias: str, mappings: list[tuple[str, str]]) -> tuple[str, dict[str, str]]:
+    clauses: list[str] = []
+    params: dict[str, str] = {}
+    for index, (osm_key, osm_value) in enumerate(mappings):
+        key_param = f"osm_key_{index}"
+        value_param = f"osm_value_{index}"
+        clauses.append(
+            f'COALESCE({alias}."{osm_key}", {alias}.tags -> :{key_param}) = :{value_param}'
+        )
+        params[key_param] = osm_key
+        params[value_param] = osm_value
+    return "(" + " OR ".join(clauses) + ")", params
 
 
 def ensure_osm_tables() -> None:
@@ -112,13 +151,13 @@ def build_real_amenity_aggregation() -> bool:
     with engine.begin() as connection:
         logger.info("Leere alte OSM-Aggregation osm.region_amenity_agg")
         connection.execute(text("TRUNCATE osm.region_amenity_agg"))
-        for category, tag_expression in CATEGORY_MAPPING.items():
-            osm_key, osm_value = tag_expression.split("=", 1)
+        for category, mappings in CATEGORY_MAPPING.items():
+            point_condition, point_params = _build_tag_match_condition("point", mappings)
+            polygon_condition, polygon_params = _build_tag_match_condition("polygon", mappings)
             logger.info(
-                "Aggregiere OSM-Kategorie %s (%s=%s)",
+                "Aggregiere OSM-Kategorie %s (%s Mapping(s))",
                 category,
-                osm_key,
-                osm_value,
+                len(mappings),
             )
             connection.execute(
                 text(
@@ -150,7 +189,7 @@ def build_real_amenity_aggregation() -> bool:
                         FROM osm.planet_osm_point point
                         WHERE point.way && b.geom
                           AND ST_Covers(b.geom, point.way)
-                          AND COALESCE(point."{osm_key}", point.tags -> :osm_key) = :osm_value
+                          AND {point_condition}
 
                         UNION ALL
 
@@ -158,7 +197,7 @@ def build_real_amenity_aggregation() -> bool:
                         FROM osm.planet_osm_polygon polygon
                         WHERE polygon.way && b.geom
                           AND ST_Covers(b.geom, ST_PointOnSurface(polygon.way))
-                          AND COALESCE(polygon."{osm_key}", polygon.tags -> :osm_key) = :osm_value
+                          AND {polygon_condition}
                     ) p ON TRUE
                     GROUP BY b.ags, b.population
                     ON CONFLICT (ars, category) DO UPDATE
@@ -167,7 +206,7 @@ def build_real_amenity_aggregation() -> bool:
                         updated_at = now();
                     """
                 ),
-                {"category": category, "osm_key": osm_key, "osm_value": osm_value},
+                {"category": category, **point_params, **polygon_params},
             )
             category_rows = connection.execute(
                 text(

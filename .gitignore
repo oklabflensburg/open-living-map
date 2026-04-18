@@ -1,5 +1,6 @@
 .DS_Store
 .vscode/
+.codex
 
 # Local data volumes and ETL artifacts
 data/

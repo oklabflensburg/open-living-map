@@ -16,15 +16,34 @@ MANDATORY_SOURCE_LINKS = [
 ]
 
 AMENITY_CATEGORY_MAPPING = {
-    "pharmacy": ("amenity", "pharmacy"),
-    "doctors": ("amenity", "doctors"),
-    "childcare": ("amenity", "kindergarten"),
-    "school": ("amenity", "school"),
-    "supermarket": ("shop", "supermarket"),
-    "station": ("railway", "station"),
-    "transit_stop": ("highway", "bus_stop"),
-    "playground": ("leisure", "playground"),
-    "park": ("leisure", "park"),
+    "pharmacy": [("amenity", "pharmacy")],
+    "doctors": [("amenity", "doctors")],
+    "childcare": [("amenity", "kindergarten")],
+    "school": [("amenity", "school")],
+    "supermarket": [("shop", "supermarket")],
+    "station": [("railway", "station")],
+    "transit_stop": [("highway", "bus_stop")],
+    "playground": [("leisure", "playground")],
+    "park": [("leisure", "park")],
+    "museum": [("tourism", "museum")],
+    "theatre": [("amenity", "theatre")],
+    "sports_facility": [
+        ("leisure", "sports_centre"),
+        ("leisure", "stadium"),
+        ("leisure", "swimming_pool"),
+        ("sport", "swimming"),
+    ],
+    "theme_park": [("tourism", "zoo"), ("tourism", "theme_park")],
+    "nature_reserve": [("leisure", "nature_reserve"), ("boundary", "protected_area")],
+    "airfield": [("aeroway", "aerodrome")],
+    "restaurant": [
+        ("amenity", "restaurant"),
+        ("amenity", "cafe"),
+        ("amenity", "bar"),
+        ("amenity", "pub"),
+        ("amenity", "fast_food"),
+    ],
+    "library": [("amenity", "library")],
 }
 
 ACCIDENT_CATEGORY_ORDER = [
@@ -40,6 +59,20 @@ ACCIDENT_CATEGORY_LABELS = {
 }
 
 
+def _build_tag_match_condition(alias: str, mappings: list[tuple[str, str]]) -> tuple[str, dict[str, str]]:
+    clauses: list[str] = []
+    params: dict[str, str] = {}
+    for index, (osm_key, osm_value) in enumerate(mappings):
+        key_param = f"{alias}_osm_key_{index}"
+        value_param = f"{alias}_osm_value_{index}"
+        clauses.append(
+            f'COALESCE({alias}."{osm_key}", {alias}.tags -> CAST(:{key_param} AS text)) = CAST(:{value_param} AS text)'
+        )
+        params[key_param] = osm_key
+        params[value_param] = osm_value
+    return "(" + " OR ".join(clauses) + ")", params
+
+
 class RegionRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -49,13 +82,15 @@ class RegionRepository:
         return list(self.session.exec(statement))
 
     def get_by_ars(self, ars: str) -> Region | None:
-        statement = select(Region).where(Region.ars.in_(lookup_candidates(ars)))
+        statement = select(Region).where(
+            Region.ars.in_(lookup_candidates(ars)))
         region = self.session.exec(statement).first()
         if region:
             return region
 
         requested_slug = slugify_region_name(ars)
-        slug_statement = select(Region).where(Region.slug == requested_slug).order_by(Region.id)
+        slug_statement = select(Region).where(
+            Region.slug == requested_slug).order_by(Region.id)
         return self.session.exec(slug_statement).first()
 
     def get_score_snapshot(self, region_id: int) -> RegionScoreSnapshot | None:
@@ -106,7 +141,8 @@ class RegionRepository:
         return sorted(set(links))
 
     def list_amenity_aggregates(self, ars: str) -> list[tuple[str, int, float]]:
-        table_exists = self.session.execute(text("SELECT to_regclass('osm.region_amenity_agg') IS NOT NULL")).scalar()
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('osm.region_amenity_agg') IS NOT NULL")).scalar()
         if not table_exists:
             return []
 
@@ -124,22 +160,27 @@ class RegionRepository:
         return [(str(row[0]), int(row[1]), float(row[2])) for row in rows]
 
     def get_amenity_pois_geojson(self, ars: str, category: str) -> dict[str, Any] | None:
-        mapping = AMENITY_CATEGORY_MAPPING.get(category)
-        if mapping is None:
+        mappings = AMENITY_CATEGORY_MAPPING.get(category)
+        if mappings is None:
             return None
 
         boundary_exists = self.session.execute(
             text("SELECT to_regclass('geo.municipality_boundary') IS NOT NULL")
         ).scalar()
-        point_exists = self.session.execute(text("SELECT to_regclass('osm.planet_osm_point') IS NOT NULL")).scalar()
-        polygon_exists = self.session.execute(text("SELECT to_regclass('osm.planet_osm_polygon') IS NOT NULL")).scalar()
+        point_exists = self.session.execute(
+            text("SELECT to_regclass('osm.planet_osm_point') IS NOT NULL")).scalar()
+        polygon_exists = self.session.execute(
+            text("SELECT to_regclass('osm.planet_osm_polygon') IS NOT NULL")).scalar()
         if not boundary_exists or not point_exists or not polygon_exists:
             return {
                 "type": "FeatureCollection",
                 "features": [],
             }
 
-        osm_key, osm_value = mapping
+        point_condition, point_params = _build_tag_match_condition(
+            "point", mappings)
+        polygon_condition, polygon_params = _build_tag_match_condition(
+            "polygon", mappings)
         rows = self.session.execute(
             text(
                 f"""
@@ -159,7 +200,7 @@ class RegionRepository:
                     CROSS JOIN boundary b
                     WHERE point.way && b.geom
                       AND ST_Covers(b.geom, point.way)
-                      AND COALESCE(point."{osm_key}", point.tags -> CAST(:osm_key AS text)) = CAST(:osm_value AS text)
+                      AND {point_condition}
 
                     UNION ALL
 
@@ -172,7 +213,7 @@ class RegionRepository:
                     CROSS JOIN boundary b
                     WHERE polygon.way && b.geom
                       AND ST_Covers(b.geom, ST_PointOnSurface(polygon.way))
-                      AND COALESCE(polygon."{osm_key}", polygon.tags -> CAST(:osm_key AS text)) = CAST(:osm_value AS text)
+                      AND {polygon_condition}
                 )
                 SELECT json_build_object(
                     'type', 'FeatureCollection',
@@ -195,7 +236,7 @@ class RegionRepository:
                 FROM pois
                 """
             ),
-            {"ars": ars, "osm_key": osm_key, "osm_value": osm_value, "category": category},
+            {"ars": ars, "category": category, **point_params, **polygon_params},
         ).scalar()
         if rows is None:
             return {
@@ -207,7 +248,8 @@ class RegionRepository:
         return dict(rows)
 
     def list_accident_stats(self, ars: str) -> list[tuple[str, int]]:
-        table_exists = self.session.execute(text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")).scalar()
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")).scalar()
         if not table_exists:
             return []
         rows = self.session.execute(
@@ -225,7 +267,8 @@ class RegionRepository:
         return [(category, counts[category]) for category in ACCIDENT_CATEGORY_ORDER if category in counts]
 
     def get_accident_pois_geojson(self, ars: str, category: str) -> dict[str, Any]:
-        table_exists = self.session.execute(text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")).scalar()
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")).scalar()
         if not table_exists:
             return {"type": "FeatureCollection", "features": []}
 
@@ -251,7 +294,7 @@ class RegionRepository:
                 )
                 FROM traffic.accident_point
                 WHERE region_ars = :ars
-                  AND category = CAST(:category AS text)
+                  AND category = :category
                 """
             ),
             {"ars": ars, "category": category},
