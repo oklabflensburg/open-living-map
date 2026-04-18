@@ -63,7 +63,7 @@
           <div class="flex flex-wrap gap-4 text-sm font-medium">
             <NuxtLink to="/finder">Finder</NuxtLink>
             <NuxtLink to="/results">Ranking</NuxtLink>
-            <NuxtLink to="/compare">Compare</NuxtLink>
+            <NuxtLink to="/compare">Vergleich</NuxtLink>
             <NuxtLink to="/methodik">Methodik</NuxtLink>
           </div>
         </div>
@@ -72,6 +72,20 @@
     <main class="mx-auto max-w-6xl px-4 py-8">
       <NuxtPage />
     </main>
+    <footer class="mt-10 border-t border-slate-200 bg-white/80">
+      <div class="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p class="font-medium text-slate-800">{{ siteName }}</p>
+          <p>Offene Daten für Regionen in Deutschland.</p>
+        </div>
+        <div class="flex flex-wrap gap-x-5 gap-y-2">
+          <a :href="repoUrl" target="_blank" rel="noreferrer" class="hover:text-sky-700">Repository</a>
+          <NuxtLink to="/methodik" class="hover:text-sky-700">Methodik</NuxtLink>
+          <NuxtLink to="/impressum" class="hover:text-sky-700">Impressum</NuxtLink>
+          <NuxtLink to="/datenschutz" class="hover:text-sky-700">Datenschutz</NuxtLink>
+        </div>
+      </div>
+    </footer>
   </div>
 </template>
 
@@ -79,9 +93,11 @@
 import type { Region } from '~/types/api'
 
 const { siteName, organizationName, siteDescription, siteLocale, absoluteUrl } = useSiteSeo()
+const { legal } = useLegalConfig()
 const router = useRouter()
 const route = useRoute()
 const { fetchRegions } = useRegions()
+const repoUrl = computed(() => legal.value.repoUrl || 'https://github.com/oklabflensburg/wohnortkompass')
 
 const searchRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
@@ -225,10 +241,10 @@ useSeoMeta({
   description: siteDescription,
   ogSiteName: siteName,
   ogLocale: siteLocale,
-  ogImage: absoluteUrl('/og-image.svg'),
-  ogImageSecureUrl: absoluteUrl('/og-image.svg'),
+  ogImage: absoluteUrl('/og-image.png'),
+  ogImageSecureUrl: absoluteUrl('/og-image.png'),
   ogImageAlt: 'Wohnort-Kompass: Regionen in Deutschland mit offenen Daten vergleichen',
-  twitterImage: absoluteUrl('/og-image.svg'),
+  twitterImage: absoluteUrl('/og-image.png'),
   twitterImageAlt: 'Wohnort-Kompass: Regionen in Deutschland mit offenen Daten vergleichen',
   twitterCard: 'summary_large_image'
 })
