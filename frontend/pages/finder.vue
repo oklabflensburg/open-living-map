@@ -16,7 +16,7 @@
           <p class="font-semibold">Formel</p>
           <p>
             Gesamt = (Klima×{{ form.climate_weight }} + Luft×{{ form.air_weight }} + Sicherheit×{{ form.safety_weight
-            }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + ÖPNV×{{
+            }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + Flächennutzung×{{ form.landuse_weight }} + ÖPNV×{{
               form.oepnv_weight
             }}) / {{ weightSum }}
           </p>
@@ -29,6 +29,7 @@
           Sicherheit {{ effectiveWeights.safety }}% ·
           Demografie {{ effectiveWeights.demographics }}% ·
           Alltagsnähe {{ effectiveWeights.amenities }}% ·
+          Flächennutzung {{ effectiveWeights.landuse }}% ·
           ÖPNV {{ effectiveWeights.oepnv }}%
         </div>
       </div>
@@ -72,7 +73,7 @@ const form = ref({ ...store.$state })
 
 const title = 'Finder'
 const description =
-  'Lege Gewichtungen für Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV fest und berechne daraus passende Regionen.'
+  'Lege Gewichtungen für Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe, Flächennutzung und ÖPNV fest und berechne daraus passende Regionen.'
 
 useSeoMeta({
   title,
@@ -127,6 +128,7 @@ const weightSum = computed(() => {
     form.value.safety_weight +
     form.value.demographics_weight +
     form.value.amenities_weight +
+    form.value.landuse_weight +
     form.value.oepnv_weight
   return sum === 0 ? 1 : sum
 })
@@ -138,9 +140,10 @@ const effectiveWeights = computed(() => {
     form.value.safety_weight +
     form.value.demographics_weight +
     form.value.amenities_weight +
+    form.value.landuse_weight +
     form.value.oepnv_weight
   if (sum === 0) {
-    return { climate: 0, air: 0, safety: 0, demographics: 0, amenities: 0, oepnv: 0 }
+    return { climate: 0, air: 0, safety: 0, demographics: 0, amenities: 0, landuse: 0, oepnv: 0 }
   }
   return {
     climate: Math.round((form.value.climate_weight / sum) * 100),
@@ -148,6 +151,7 @@ const effectiveWeights = computed(() => {
     safety: Math.round((form.value.safety_weight / sum) * 100),
     demographics: Math.round((form.value.demographics_weight / sum) * 100),
     amenities: Math.round((form.value.amenities_weight / sum) * 100),
+    landuse: Math.round((form.value.landuse_weight / sum) * 100),
     oepnv: Math.round((form.value.oepnv_weight / sum) * 100)
   }
 })
@@ -159,8 +163,8 @@ const categoryDetails = [
     kickerClass: 'text-amber-700',
     cardClass: 'border-amber-200 bg-amber-50/70',
     title: 'Klima',
-    description: 'Klimatische Belastung und Niederschlag auf Kreisebene (DWD).',
-    indicators: ['Hitzetage', 'Sommertage', 'Niederschlags-Proxy'],
+    description: 'Klimatische Belastung und Niederschlag auf Basis von DWD-Daten.',
+    indicators: ['Hitzetage', 'Sommertage', 'Niederschlag'],
     direction: 'Weniger Hitzetage sind besser. Die übrigen Klimaindikatoren werden je nach fachlicher Richtung bewertet.'
   },
   {
@@ -204,6 +208,22 @@ const categoryDetails = [
     direction: 'Höher ist besser.'
   },
   {
+    key: 'landuse',
+    kicker: 'Kategorie',
+    kickerClass: 'text-orange-700',
+    cardClass: 'border-orange-200 bg-orange-50/70',
+    title: 'Flächennutzung',
+    description: 'Amtliche Flächenstatistik aus dem Flächenatlas auf Gemeindeebene.',
+    indicators: [
+      'Waldanteil',
+      'Landwirtschaftsanteil',
+      'Siedlungs- und Verkehrsflächenanteil',
+      'Verkehrsflächenanteil',
+      'Siedlungs- und Verkehrsfläche je Einwohner'
+    ],
+    direction: 'Mehr Wald- und Landwirtschaftsfläche wirkt positiv. Hohe Verkehrs- und Siedlungsflächenanteile wirken negativ.'
+  },
+  {
     key: 'oepnv',
     kicker: 'Kategorie',
     kickerClass: 'text-indigo-700',
@@ -221,6 +241,7 @@ function submit() {
   store.setWeight('safety_weight', form.value.safety_weight)
   store.setWeight('demographics_weight', form.value.demographics_weight)
   store.setWeight('amenities_weight', form.value.amenities_weight)
+  store.setWeight('landuse_weight', form.value.landuse_weight)
   store.setWeight('oepnv_weight', form.value.oepnv_weight)
   store.setStateCode(form.value.state_code)
   router.push('/results')

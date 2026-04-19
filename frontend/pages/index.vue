@@ -9,7 +9,7 @@
           Finde passende Gemeinden und Orte für deinen Alltag.
         </h1>
         <p class="mt-4 text-slate-600">
-          Wohnort-Kompass kombiniert offene Daten aus Klima, Luft, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.
+          Wohnort-Kompass kombiniert offene Daten aus Klima, Luft, Verkehrssicherheit, Demografie, Alltagsnähe, Flächennutzung und ÖPNV.
         </p>
         <div class="mt-6 flex gap-3">
           <NuxtLink to="/finder" class="rounded bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800">Jetzt starten</NuxtLink>
@@ -71,7 +71,7 @@ const { siteName, siteDescription, absoluteUrl } = useSiteSeo()
 
 const title = 'Wohnort finden mit offenen Daten'
 const description =
-  'Vergleiche Gemeinden in Deutschland nach Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.'
+  'Vergleiche Gemeinden in Deutschland nach Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe, Flächennutzung und ÖPNV.'
 
 useSeoMeta({
   title,

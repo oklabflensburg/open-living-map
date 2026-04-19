@@ -18,6 +18,7 @@ class RegionScoreSnapshot(SQLModel, table=True):
     score_safety: float = 0
     score_demographics: float = 0
     score_amenities: float = 0
+    score_landuse: float = 0
     score_oepnv: float = 0
     explanation_json: dict = Field(default_factory=dict, sa_column=Column(JSON))
     updated_at: datetime = Field(default_factory=datetime.utcnow)

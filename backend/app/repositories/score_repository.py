@@ -34,6 +34,7 @@ CATEGORY_SCORE_COLUMNS = {
     "safety": "score_safety",
     "demographics": "score_demographics",
     "amenities": "score_amenities",
+    "landuse": "score_landuse",
     "oepnv": "score_oepnv",
 }
 

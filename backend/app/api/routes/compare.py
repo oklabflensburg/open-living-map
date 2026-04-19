@@ -20,6 +20,7 @@ def compare(
         safety_weight=1,
         demographics_weight=1,
         amenities_weight=1,
+        landuse_weight=1,
         oepnv_weight=1,
     )
     service = ScoringService(session)

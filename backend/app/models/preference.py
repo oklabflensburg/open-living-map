@@ -12,6 +12,7 @@ class UserPreferenceSession(SQLModel, table=True):
     safety_weight: int = 0
     demographics_weight: int = 0
     amenities_weight: int = 0
+    landuse_weight: int = 0
     oepnv_weight: int = 0
     urban_preference: int | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

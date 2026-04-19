@@ -8,6 +8,7 @@ export const usePreferencesStore = defineStore('preferences', {
     safety_weight: 3,
     demographics_weight: 4,
     amenities_weight: 5,
+    landuse_weight: 3,
     oepnv_weight: 4,
     state_code: null
   }),

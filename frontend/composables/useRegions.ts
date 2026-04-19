@@ -19,5 +19,10 @@ export function useRegions() {
     return await apiFetch<GeoJsonFeatureCollection>(`/regions/${ars}/accidents/${category}`)
   }
 
-  return { fetchRegions, fetchRegion, fetchAmenityPois, fetchAccidentPois }
+  const fetchStateBoundaries = async (stateCode: string | null): Promise<GeoJsonFeatureCollection> => {
+    const query = stateCode ? `?state_code=${encodeURIComponent(stateCode)}` : ''
+    return await apiFetch<GeoJsonFeatureCollection>(`/regions/state-boundaries${query}`)
+  }
+
+  return { fetchRegions, fetchRegion, fetchAmenityPois, fetchAccidentPois, fetchStateBoundaries }
 }

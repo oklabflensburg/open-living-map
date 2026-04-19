@@ -8,6 +8,7 @@ def build_reason(category_scores: dict[str, float], preferences: RecommendationI
         "safety": preferences.safety_weight,
         "demographics": preferences.demographics_weight,
         "amenities": preferences.amenities_weight,
+        "landuse": preferences.landuse_weight,
         "oepnv": preferences.oepnv_weight,
     }
     if sum(weight_map.values()) == 0:

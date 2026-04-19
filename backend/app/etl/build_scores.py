@@ -12,7 +12,7 @@ from app.models.score import RegionScoreSnapshot
 logger = logging.getLogger("etl.build_scores")
 logging.basicConfig(level=logging.INFO)
 
-CATEGORIES = ["climate", "air", "safety", "demographics", "amenities", "oepnv"]
+CATEGORIES = ["climate", "air", "safety", "demographics", "amenities", "landuse", "oepnv"]
 
 
 def main() -> None:
@@ -64,6 +64,7 @@ def main() -> None:
                 existing.score_safety = category_scores["safety"]
                 existing.score_demographics = category_scores["demographics"]
                 existing.score_amenities = category_scores["amenities"]
+                existing.score_landuse = category_scores["landuse"]
                 existing.score_oepnv = category_scores["oepnv"]
                 existing.explanation_json = explanation
                 session.add(existing)
@@ -79,6 +80,7 @@ def main() -> None:
                         score_safety=category_scores["safety"],
                         score_demographics=category_scores["demographics"],
                         score_amenities=category_scores["amenities"],
+                        score_landuse=category_scores["landuse"],
                         score_oepnv=category_scores["oepnv"],
                         explanation_json=explanation,
                     )

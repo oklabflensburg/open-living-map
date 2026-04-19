@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from sqlalchemy import delete
 
 from app.core.config import settings
-from app.core.db import engine, ensure_indicator_schema_compatibility
+from app.core.db import engine, ensure_indicator_schema_compatibility, ensure_score_schema_compatibility
 from app.models.indicator import IndicatorDefinition, RegionIndicatorValue
 from app.models.region import Region
 
@@ -213,4 +213,5 @@ def normalize_robust_percentile(values: list[float], direction: str) -> list[flo
 
 def with_session() -> Session:
     ensure_indicator_schema_compatibility()
+    ensure_score_schema_compatibility()
     return Session(engine)

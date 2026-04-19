@@ -26,7 +26,7 @@
         bar-class="bg-sky-600"
       />
       <ScoreBar
-        label="Sicherheit"
+        label="Verkehrssicherheit"
         :value="item.score_safety"
         card-class="border-rose-200 bg-rose-50/70"
         badge-class="bg-rose-100 text-rose-800"
@@ -45,6 +45,13 @@
         card-class="border-emerald-200 bg-emerald-50/70"
         badge-class="bg-emerald-100 text-emerald-800"
         bar-class="bg-emerald-600"
+      />
+      <ScoreBar
+        label="Flächennutzung"
+        :value="item.score_landuse"
+        card-class="border-orange-200 bg-orange-50/70"
+        badge-class="bg-orange-100 text-orange-800"
+        bar-class="bg-orange-600"
       />
       <ScoreBar
         label="ÖPNV"
@@ -122,6 +129,7 @@ const categoryLabels: Record<string, string> = {
   safety: 'Verkehrssicherheit',
   demographics: 'Demografie/Familie',
   amenities: 'Alltagsnähe',
+  landuse: 'Flächennutzung',
   oepnv: 'ÖPNV'
 }
 
@@ -145,6 +153,10 @@ const categoryThemes: Record<string, { cardClass: string; badgeClass: string }> 
   amenities: {
     cardClass: 'border-emerald-200 bg-emerald-50/70',
     badgeClass: 'bg-emerald-100 text-emerald-800'
+  },
+  landuse: {
+    cardClass: 'border-orange-200 bg-orange-50/70',
+    badgeClass: 'bg-orange-100 text-orange-800'
   },
   oepnv: {
     cardClass: 'border-indigo-200 bg-indigo-50/70',

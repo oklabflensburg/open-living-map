@@ -26,7 +26,7 @@ def recommendations(
 )
 def top_rankings_by_category(
     category: str = Path(
-        pattern=r"^(climate|air|safety|demographics|amenities|oepnv)$"
+        pattern=r"^(climate|air|safety|demographics|amenities|landuse|oepnv)$"
     ),
     state_code: str | None = Query(default=None, pattern=r"^\d{2}$"),
     limit: int = Query(default=100, ge=1, le=100),
@@ -47,7 +47,7 @@ def top_rankings_by_category(
 def top_rankings(
     state_code: str = Path(pattern=r"^\d{2}$"),
     category: str = Path(
-        pattern=r"^(climate|air|safety|demographics|amenities|oepnv)$"
+        pattern=r"^(climate|air|safety|demographics|amenities|landuse|oepnv)$"
     ),
     limit: int = Query(default=100, ge=1, le=100),
     session: Session = Depends(get_session),

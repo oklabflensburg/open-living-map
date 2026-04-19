@@ -7,6 +7,7 @@ class RecommendationInput(BaseModel):
     safety_weight: int = Field(ge=0, le=5)
     demographics_weight: int = Field(ge=0, le=5)
     amenities_weight: int = Field(ge=0, le=5)
+    landuse_weight: int = Field(ge=0, le=5)
     oepnv_weight: int = Field(ge=0, le=5)
     state_code: str | None = Field(default=None, pattern=r"^\d{2}$")
 
@@ -37,6 +38,7 @@ class RecommendationItem(BaseModel):
     score_safety: float
     score_demographics: float
     score_amenities: float
+    score_landuse: float
     score_oepnv: float
     reason: str
     score_formula: str = ""

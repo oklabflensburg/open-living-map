@@ -108,12 +108,15 @@ const scopeName = stateMeta?.name || germanyRankingScope.name
 const scopeCode = stateMeta?.code || null
 const canonicalScopeSlug = stateMeta?.slug || germanyRankingScope.slug
 const title = `Top 100 ${categoryMeta.label} in ${scopeName}`
+const categoryExplanation = category === 'landuse'
+  ? 'Im Flächennutzungs-Score stecken amtliche Flächenatlas-Kennzahlen zur Flächennutzung.'
+  : `${categoryMeta.label} basiert auf den zugehörigen Indikatoren dieser Kategorie.`
 const description = isNationwide
-  ? `Top 100 Kreise und kreisfreie Stadte in Deutschland, sortiert nach ${categoryMeta.label}.`
-  : `Top 100 Kreise und kreisfreie Stadte in ${scopeName}, sortiert nach ${categoryMeta.label}.`
+  ? `Top 100 Gemeinden in Deutschland, sortiert nach ${categoryMeta.label}. ${categoryExplanation}`
+  : `Top 100 Gemeinden in ${scopeName}, sortiert nach ${categoryMeta.label}. ${categoryExplanation}`
 const introText = isNationwide
-  ? `Die Liste sortiert alle verfügbaren Kreise und kreisfreien Städte in Deutschland nach dem Kategorie-Score ${categoryMeta.label.toLowerCase()}.`
-  : `Die Liste sortiert alle verfügbaren Kreise und kreisfreien Städte im gewählten Bundesland nach dem Kategorie-Score ${categoryMeta.label.toLowerCase()}.`
+  ? `Die Liste sortiert alle verfügbaren Gemeinden in Deutschland nach dem Kategorie-Score ${categoryMeta.label.toLowerCase()}. ${categoryExplanation}`
+  : `Die Liste sortiert alle verfügbaren Gemeinden im gewählten Bundesland nach dem Kategorie-Score ${categoryMeta.label.toLowerCase()}. ${categoryExplanation}`
 
 useSeoMeta({
   title,

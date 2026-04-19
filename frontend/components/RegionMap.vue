@@ -5,13 +5,17 @@
 </template>
 
 <script setup lang="ts">
-import type { RecommendationItem } from '~/types/api'
+import type { GeoJsonFeatureCollection, RecommendationItem } from '~/types/api'
 
-const props = defineProps<{ items: RecommendationItem[] }>()
+const props = defineProps<{
+  items: RecommendationItem[]
+  stateBoundaries?: GeoJsonFeatureCollection | null
+}>()
 const router = useRouter()
 const container = ref<HTMLElement | null>(null)
 let LLeaflet: typeof import('leaflet') | null = null
 let map: import('leaflet').Map | null = null
+let stateLayer: import('leaflet').GeoJSON | null = null
 let layer: import('leaflet').LayerGroup | null = null
 let markerIcon: import('leaflet').Icon | null = null
 
@@ -35,8 +39,37 @@ onMounted(async () => {
   }).addTo(map)
 
   layer = LLeaflet.layerGroup().addTo(map)
+  renderStateBoundaries()
   renderMarkers()
 })
+
+function renderStateBoundaries() {
+  if (!LLeaflet || !map) {
+    return
+  }
+
+  stateLayer?.remove()
+  stateLayer = null
+
+  const featureCollection = props.stateBoundaries
+  if (!featureCollection?.features?.length) {
+    return
+  }
+
+  stateLayer = LLeaflet.geoJSON(featureCollection as never, {
+    style: {
+      color: '#2563eb',
+      weight: 2,
+      fillColor: '#93c5fd',
+      fillOpacity: 0.08
+    },
+    onEachFeature(feature, itemLayer) {
+      const properties = (feature.properties || {}) as Record<string, unknown>
+      const stateName = typeof properties.state_name === 'string' ? properties.state_name : 'Bundesland'
+      itemLayer.bindPopup(stateName)
+    }
+  }).addTo(map)
+}
 
 function renderMarkers() {
   if (!LLeaflet || !map || !layer || !markerIcon) {
@@ -57,12 +90,23 @@ function renderMarkers() {
       points.map((item) => [item.centroid_lat as number, item.centroid_lon as number])
     )
     map.fitBounds(bounds.pad(0.2))
+  } else if (stateLayer) {
+    map.fitBounds(stateLayer.getBounds().pad(0.08))
   }
 }
 
 watch(
   () => props.items,
   () => renderMarkers(),
+  { deep: true }
+)
+
+watch(
+  () => props.stateBoundaries,
+  () => {
+    renderStateBoundaries()
+    renderMarkers()
+  },
   { deep: true }
 )
 

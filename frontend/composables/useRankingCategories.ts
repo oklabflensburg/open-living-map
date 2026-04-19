@@ -1,6 +1,6 @@
 import type { RecommendationItem } from '~/types/api'
 
-export type RankingCategory = 'climate' | 'air' | 'safety' | 'demographics' | 'amenities' | 'oepnv'
+export type RankingCategory = 'climate' | 'air' | 'safety' | 'demographics' | 'amenities' | 'landuse' | 'oepnv'
 
 type RankingCategoryMeta = {
   key: RankingCategory
@@ -14,7 +14,7 @@ export const rankingCategories: RankingCategoryMeta[] = [
   {
     key: 'climate',
     label: 'Klima',
-    description: 'Top 100 nach Klima-Score.',
+    description: 'Top 100 nach Klima-Score aus DWD- und Flächenatlas-Daten.',
     cardClass: 'border-amber-200 bg-amber-50/70',
     badgeClass: 'bg-amber-100 text-amber-800'
   },
@@ -47,6 +47,13 @@ export const rankingCategories: RankingCategoryMeta[] = [
     badgeClass: 'bg-emerald-100 text-emerald-800'
   },
   {
+    key: 'landuse',
+    label: 'Flächennutzung',
+    description: 'Top 100 nach Flächennutzungs-Score aus Flächenatlas-Daten.',
+    cardClass: 'border-orange-200 bg-orange-50/70',
+    badgeClass: 'bg-orange-100 text-orange-800'
+  },
+  {
     key: 'oepnv',
     label: 'ÖPNV',
     description: 'Top 100 nach ÖPNV-Score.',
@@ -71,6 +78,8 @@ export function getRankingScore(item: RecommendationItem, category: RankingCateg
       return item.score_demographics
     case 'amenities':
       return item.score_amenities
+    case 'landuse':
+      return item.score_landuse
     case 'oepnv':
       return item.score_oepnv
   }

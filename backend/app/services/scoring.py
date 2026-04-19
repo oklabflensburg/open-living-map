@@ -17,6 +17,7 @@ CATEGORY_LABELS = {
     "safety": "Verkehrssicherheit",
     "demographics": "Demografie/Familie",
     "amenities": "Alltagsnähe",
+    "landuse": "Flächennutzung",
     "oepnv": "ÖPNV",
 }
 
@@ -32,6 +33,11 @@ INDICATOR_LABELS = {
     "female_share_destatis": "Frauenanteil",
     "youth_share_destatis": "Anteil unter 18 Jahren",
     "senior_share_destatis": "Anteil ab 65 Jahren",
+    "forest_share_pct": "Waldanteil",
+    "settlement_transport_share_pct": "Siedlungs- und Verkehrsflächenanteil",
+    "agriculture_share_pct": "Landwirtschaftsanteil",
+    "transport_share_pct": "Verkehrsflächenanteil",
+    "settlement_transport_sqm_per_capita": "Siedlungs- und Verkehrsfläche je Einwohner",
     "amenities_density": "OSM-POI-Dichte",
     "oepnv_stop_density": "Haltestellendichte",
     "oepnv_departures_per_10k": "Abfahrtsdichte",
@@ -46,6 +52,7 @@ UNIT_LABELS = {
     "per_10k": "je 10.000 Einwohner",
     "departures_per_10k": "Abfahrten je 10.000 Einwohner",
     "stops_per_10k": "Haltestellen je 10.000 Einwohner",
+    "sqm_per_capita": "m² je Einwohner",
     "index_0_100": "Index von 0 bis 100",
 }
 
@@ -95,6 +102,7 @@ class ScoringService:
             "safety": preferences.safety_weight,
             "demographics": preferences.demographics_weight,
             "amenities": preferences.amenities_weight,
+            "landuse": preferences.landuse_weight,
             "oepnv": preferences.oepnv_weight,
         }
         denominator = sum(weights.values())
@@ -116,6 +124,7 @@ class ScoringService:
             'safety_weight': 0,
             'demographics_weight': 0,
             'amenities_weight': 0,
+            'landuse_weight': 0,
             'oepnv_weight': 0,
         }
         weight_key = f'{category}_weight'
@@ -131,6 +140,7 @@ class ScoringService:
             safety_weight=preferences.safety_weight,
             demographics_weight=preferences.demographics_weight,
             amenities_weight=preferences.amenities_weight,
+            landuse_weight=preferences.landuse_weight,
             oepnv_weight=preferences.oepnv_weight,
         )
         self.session.add(row)
@@ -144,6 +154,7 @@ class ScoringService:
             "safety": preferences.safety_weight,
             "demographics": preferences.demographics_weight,
             "amenities": preferences.amenities_weight,
+            "landuse": preferences.landuse_weight,
             "oepnv": preferences.oepnv_weight,
         }
 
@@ -329,6 +340,7 @@ class ScoringService:
                 "safety": snapshot.score_safety,
                 "demographics": snapshot.score_demographics,
                 "amenities": snapshot.score_amenities,
+                "landuse": snapshot.score_landuse,
                 "oepnv": snapshot.score_oepnv,
             }
             total = self.weighted_total(category_scores, preferences)
@@ -348,6 +360,7 @@ class ScoringService:
                     score_safety=snapshot.score_safety,
                     score_demographics=snapshot.score_demographics,
                     score_amenities=snapshot.score_amenities,
+                    score_landuse=snapshot.score_landuse,
                     score_oepnv=snapshot.score_oepnv,
                     reason=build_reason(category_scores, preferences),
                 )
@@ -366,6 +379,7 @@ class ScoringService:
                 "safety": item.score_safety,
                 "demographics": item.score_demographics,
                 "amenities": item.score_amenities,
+                "landuse": item.score_landuse,
                 "oepnv": item.score_oepnv,
             }
             score_formula, calculation_details, indicators = self.build_region_explanation(
@@ -402,6 +416,7 @@ class ScoringService:
                 "safety": snapshot.score_safety,
                 "demographics": snapshot.score_demographics,
                 "amenities": snapshot.score_amenities,
+                "landuse": snapshot.score_landuse,
                 "oepnv": snapshot.score_oepnv,
             }
             items.append(
@@ -420,6 +435,7 @@ class ScoringService:
                     score_safety=snapshot.score_safety,
                     score_demographics=snapshot.score_demographics,
                     score_amenities=snapshot.score_amenities,
+                    score_landuse=snapshot.score_landuse,
                     score_oepnv=snapshot.score_oepnv,
                     reason=build_reason(category_scores, preferences),
                 )

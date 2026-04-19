@@ -25,6 +25,7 @@ export interface RecommendationInput {
   safety_weight: number
   demographics_weight: number
   amenities_weight: number
+  landuse_weight: number
   oepnv_weight: number
   state_code: string | null
 }
@@ -44,6 +45,7 @@ export interface RecommendationItem {
   score_safety: number
   score_demographics: number
   score_amenities: number
+  score_landuse: number
   score_oepnv: number
   reason: string
   score_formula: string
@@ -92,6 +94,15 @@ export interface AirStationInfo {
   measures_url: string
 }
 
+export interface LandUseStat {
+  year: number
+  forest_share_pct: number | null
+  settlement_transport_share_pct: number | null
+  agriculture_share_pct: number | null
+  transport_share_pct: number | null
+  settlement_transport_sqm_per_capita: number | null
+}
+
 export interface GeoJsonFeatureCollection {
   type: 'FeatureCollection'
   features: Array<{
@@ -109,6 +120,7 @@ export interface RegionDetailResponse {
   amenity_stats: AmenityStat[]
   accident_stats: AccidentStat[]
   air_stations: AirStationInfo[]
+  land_use_stat: LandUseStat | null
   geometry: Record<string, unknown> | null
   score_formula: string
   calculation_details: string[]

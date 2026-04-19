@@ -18,7 +18,7 @@
     </div>
 
     <div class="mb-6">
-      <RegionMap :items="response?.items || []" />
+      <RegionMap :items="response?.items || []" :state-boundaries="stateBoundaries" />
     </div>
 
     <div v-if="pending" class="text-slate-500">Lade Empfehlungen...</div>
@@ -40,10 +40,12 @@ import type { RecommendationResponse } from '~/types/api'
 const { siteName, absoluteUrl } = useSiteSeo()
 const store = usePreferencesStore()
 const { fetchRecommendations } = useRecommendations()
+const { fetchStateBoundaries } = useRegions()
 
 const pending = ref(true)
 const error = ref('')
 const response = ref<RecommendationResponse | null>(null)
+const stateBoundaries = ref<Record<string, unknown> | null>(null)
 
 const title = 'Ranking'
 const description = 'Ergebnisse und Kartenansicht der berechneten Wohnort-Empfehlungen.'
@@ -68,7 +70,12 @@ async function loadRecommendations() {
   error.value = ''
 
   try {
-    response.value = await fetchRecommendations({ ...store.$state })
+    const [recommendations, boundaries] = await Promise.all([
+      fetchRecommendations({ ...store.$state }),
+      fetchStateBoundaries(store.state_code)
+    ])
+    response.value = recommendations
+    stateBoundaries.value = boundaries
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Unbekannter Fehler'
   } finally {

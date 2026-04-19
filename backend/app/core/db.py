@@ -22,6 +22,27 @@ def ensure_indicator_schema_compatibility() -> None:
         session.commit()
 
 
+def ensure_score_schema_compatibility() -> None:
+    with Session(engine) as session:
+        session.execute(
+            text(
+                """
+                ALTER TABLE region_score_snapshot
+                ADD COLUMN IF NOT EXISTS score_landuse double precision DEFAULT 0 NOT NULL;
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                ALTER TABLE user_preference_session
+                ADD COLUMN IF NOT EXISTS landuse_weight integer DEFAULT 0 NOT NULL;
+                """
+            )
+        )
+        session.commit()
+
+
 def ensure_region_schema_compatibility() -> None:
     with Session(engine) as session:
         session.execute(
@@ -55,6 +76,7 @@ def ensure_region_schema_compatibility() -> None:
 
 def get_session() -> Generator[Session, None, None]:
     ensure_indicator_schema_compatibility()
+    ensure_score_schema_compatibility()
     ensure_region_schema_compatibility()
     with Session(engine) as session:
         yield session

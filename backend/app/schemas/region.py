@@ -59,6 +59,15 @@ class AirStationInfo(BaseModel):
     measures_url: str
 
 
+class LandUseStat(BaseModel):
+    year: int
+    forest_share_pct: float | None = None
+    settlement_transport_share_pct: float | None = None
+    agriculture_share_pct: float | None = None
+    transport_share_pct: float | None = None
+    settlement_transport_sqm_per_capita: float | None = None
+
+
 class RegionDetailResponse(BaseModel):
     region: RegionBase
     scores: dict[str, float]
@@ -67,6 +76,7 @@ class RegionDetailResponse(BaseModel):
     amenity_stats: list[AmenityStat] = []
     accident_stats: list[AccidentStat] = []
     air_stations: list[AirStationInfo] = []
+    land_use_stat: LandUseStat | None = None
     geometry: dict[str, Any] | None = None
     score_formula: str = ""
     calculation_details: list[str] = []

@@ -474,8 +474,28 @@ def ensure_boundary_table(session: Session) -> None:
     session.exec(
         sa_text(
             """
+            CREATE TABLE IF NOT EXISTS geo.state_boundary (
+                state_code text PRIMARY KEY,
+                state_name text NOT NULL,
+                geom geometry(MultiPolygon, 4326) NOT NULL
+            );
+            """
+        )
+    )
+    session.exec(
+        sa_text(
+            """
             CREATE INDEX IF NOT EXISTS municipality_boundary_geom_idx
             ON geo.municipality_boundary
+            USING gist (geom);
+            """
+        )
+    )
+    session.exec(
+        sa_text(
+            """
+            CREATE INDEX IF NOT EXISTS state_boundary_geom_idx
+            ON geo.state_boundary
             USING gist (geom);
             """
         )
@@ -518,6 +538,27 @@ def upsert_municipality_boundaries(session: Session, rows: Iterable[dict[str, ob
             ).bindparams(bindparam("target_ags", expanding=True)),
             {"target_ags": sorted(target_ags)},
         )
+    session.commit()
+
+
+def refresh_state_boundaries(session: Session) -> None:
+    ensure_boundary_table(session)
+    session.execute(sa_text("TRUNCATE geo.state_boundary"))
+    session.execute(
+        sa_text(
+            """
+            INSERT INTO geo.state_boundary (state_code, state_name, geom)
+            SELECT
+                r.state_code,
+                MAX(r.state_name) AS state_name,
+                ST_Multi(ST_Union(b.geom)) AS geom
+            FROM geo.municipality_boundary b
+            JOIN region r
+              ON r.ars = b.ags
+            GROUP BY r.state_code
+            """
+        )
+    )
     session.commit()
 
 
@@ -921,6 +962,7 @@ def main() -> None:
             logger.info("Legacy/Non-Target Regionen entfernt: %s", removed)
         upsert_regions(session, rows)
         upsert_municipality_boundaries(session, rows)
+        refresh_state_boundaries(session)
 
     logger.info("BKG-Import abgeschlossen (%s Gemeinden)", len(rows))
 

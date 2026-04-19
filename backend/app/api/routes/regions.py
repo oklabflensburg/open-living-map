@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
 from app.core.db import get_session
@@ -14,6 +14,15 @@ def list_regions(session: Session = Depends(get_session)) -> RegionListResponse:
     repository = RegionRepository(session)
     regions = repository.list_regions()
     return RegionListResponse(items=[RegionBase.model_validate(region) for region in regions])
+
+
+@router.get("/regions/state-boundaries")
+def get_state_boundaries(
+    state_code: str | None = Query(default=None, pattern=r"^\d{2}$"),
+    session: Session = Depends(get_session),
+) -> dict:
+    service = RegionService(session)
+    return service.get_state_boundaries(state_code)
 
 
 @router.get("/regions/{ars}", response_model=RegionDetailResponse)

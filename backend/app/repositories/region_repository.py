@@ -128,6 +128,47 @@ class RegionRepository:
             return json.loads(row[0])
         return dict(row[0])
 
+    def get_state_boundaries_geojson(self, state_code: str | None = None) -> dict[str, Any]:
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('geo.state_boundary') IS NOT NULL")
+        ).scalar()
+        if not table_exists:
+            return {"type": "FeatureCollection", "features": []}
+
+        state_filter = "WHERE state_code = :state_code" if state_code else ""
+        params: dict[str, Any] = {"state_code": state_code} if state_code else {}
+        row = self.session.execute(
+            text(
+                f"""
+                SELECT json_build_object(
+                    'type', 'FeatureCollection',
+                    'features', COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'type', 'Feature',
+                                'geometry', ST_AsGeoJSON(geom)::json,
+                                'properties', json_build_object(
+                                    'state_code', state_code,
+                                    'state_name', state_name
+                                )
+                            )
+                            ORDER BY state_code
+                        ),
+                        '[]'::json
+                    )
+                )
+                FROM geo.state_boundary
+                {state_filter}
+                """
+            ),
+            params,
+        ).scalar()
+        if row is None:
+            return {"type": "FeatureCollection", "features": []}
+        if isinstance(row, str):
+            return json.loads(row)
+        return dict(row)
+
     def list_source_links(self) -> list[str]:
         statement = (
             select(IndicatorDefinition.source_url)
@@ -308,6 +349,42 @@ class RegionRepository:
             )
             for row in rows
         ]
+
+    def get_land_use_stat(
+        self, ars: str
+    ) -> tuple[int, float | None, float | None, float | None, float | None, float | None] | None:
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('landuse.region_area_stat') IS NOT NULL")
+        ).scalar()
+        if not table_exists:
+            return None
+        row = self.session.execute(
+            text(
+                """
+                SELECT
+                    year,
+                    forest_share_pct,
+                    settlement_transport_share_pct,
+                    agriculture_share_pct,
+                    transport_share_pct,
+                    settlement_transport_sqm_per_capita
+                FROM landuse.region_area_stat
+                WHERE region_ars = :ars
+                LIMIT 1
+                """
+            ),
+            {"ars": ars},
+        ).first()
+        if row is None:
+            return None
+        return (
+            int(row[0]),
+            float(row[1]) if row[1] is not None else None,
+            float(row[2]) if row[2] is not None else None,
+            float(row[3]) if row[3] is not None else None,
+            float(row[4]) if row[4] is not None else None,
+            float(row[5]) if row[5] is not None else None,
+        )
 
     def get_accident_pois_geojson(self, ars: str, category: str) -> dict[str, Any]:
         table_exists = self.session.execute(

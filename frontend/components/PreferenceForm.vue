@@ -88,6 +88,13 @@ const fields: Array<{
     badgeClass: 'bg-emerald-100 text-emerald-800'
   },
   {
+    key: 'landuse_weight',
+    label: 'Flächennutzung',
+    color: '#b45309',
+    cardClass: 'border-orange-200 bg-orange-50/70',
+    badgeClass: 'bg-orange-100 text-orange-800'
+  },
+  {
     key: 'oepnv_weight',
     label: 'ÖPNV',
     color: '#4f46e5',

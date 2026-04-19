@@ -2,7 +2,7 @@ from sqlmodel import Session
 
 from app.repositories.region_repository import ACCIDENT_CATEGORY_LABELS, RegionRepository
 from app.schemas.recommendation import RecommendationInput
-from app.schemas.region import AccidentStat, AirStationInfo, AmenityStat, RegionBase, RegionDetailResponse
+from app.schemas.region import AccidentStat, AirStationInfo, AmenityStat, LandUseStat, RegionBase, RegionDetailResponse
 from app.services.scoring import ScoringService
 
 AIR_INDICATOR_LABELS = {
@@ -29,6 +29,7 @@ class RegionService:
             "safety": snapshot.score_safety if snapshot else 0.0,
             "demographics": snapshot.score_demographics if snapshot else 0.0,
             "amenities": snapshot.score_amenities if snapshot else 0.0,
+            "landuse": snapshot.score_landuse if snapshot else 0.0,
             "oepnv": snapshot.score_oepnv if snapshot else 0.0,
         }
 
@@ -36,6 +37,7 @@ class RegionService:
             f"Klimascore: {scores['climate']:.1f}",
             f"Luftqualität: {scores['air']:.1f}",
             f"Alltagsnähe: {scores['amenities']:.1f}",
+            f"Flächennutzung: {scores['landuse']:.1f}",
             f"ÖPNV: {scores['oepnv']:.1f}",
         ]
         source_links = self.repository.list_source_links()
@@ -74,6 +76,19 @@ class RegionService:
             for indicator_key, station_id, station_code, station_name, latitude, longitude, station_page_url, measures_url
             in self.repository.list_air_stations(region.ars)
         ]
+        land_use_stat_row = self.repository.get_land_use_stat(region.ars)
+        land_use_stat = (
+            LandUseStat(
+                year=land_use_stat_row[0],
+                forest_share_pct=land_use_stat_row[1],
+                settlement_transport_share_pct=land_use_stat_row[2],
+                agriculture_share_pct=land_use_stat_row[3],
+                transport_share_pct=land_use_stat_row[4],
+                settlement_transport_sqm_per_capita=land_use_stat_row[5],
+            )
+            if land_use_stat_row
+            else None
+        )
         geometry = self.repository.get_boundary_geojson(region.ars)
         base_preferences = RecommendationInput(
             climate_weight=1,
@@ -81,6 +96,7 @@ class RegionService:
             safety_weight=1,
             demographics_weight=1,
             amenities_weight=1,
+            landuse_weight=1,
             oepnv_weight=1,
         )
         score_formula, calculation_details, indicators = base_scoring.build_region_explanation(
@@ -94,6 +110,7 @@ class RegionService:
                 "safety": scores["safety"],
                 "demographics": scores["demographics"],
                 "amenities": scores["amenities"],
+                "landuse": scores["landuse"],
                 "oepnv": scores["oepnv"],
             },
             preferences=base_preferences,
@@ -107,6 +124,7 @@ class RegionService:
             amenity_stats=amenity_stats,
             accident_stats=accident_stats,
             air_stations=air_stations,
+            land_use_stat=land_use_stat,
             geometry=geometry,
             score_formula=score_formula,
             calculation_details=calculation_details,
@@ -124,3 +142,6 @@ class RegionService:
         if region is None:
             return None
         return self.repository.get_accident_pois_geojson(region.ars, category)
+
+    def get_state_boundaries(self, state_code: str | None) -> dict:
+        return self.repository.get_state_boundaries_geojson(state_code)

@@ -31,6 +31,8 @@
         badge-class="bg-violet-100 text-violet-800" bar-class="bg-violet-600" />
       <ScoreBar label="Alltagsnähe" :value="detail.scores.amenities || 0" card-class="border-emerald-200 bg-emerald-50/70"
         badge-class="bg-emerald-100 text-emerald-800" bar-class="bg-emerald-600" />
+      <ScoreBar label="Flächennutzung" :value="detail.scores.landuse || 0" card-class="border-orange-200 bg-orange-50/70"
+        badge-class="bg-orange-100 text-orange-800" bar-class="bg-orange-600" />
       <ScoreBar label="ÖPNV" :value="detail.scores.oepnv || 0" card-class="border-indigo-200 bg-indigo-50/70"
         badge-class="bg-indigo-100 text-indigo-800" bar-class="bg-indigo-600" />
     </div>
@@ -53,6 +55,30 @@
       </div>
       <p v-else class="text-sm text-amber-700">
         Für diese Gemeinde sind aktuell keine zusammengefassten Demografie-Daten verfügbar.
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-amber-200 bg-amber-50/60 p-6">
+      <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 class="text-lg font-semibold">Flächenstatistik</h2>
+          <p class="text-sm text-slate-500">Flächenatlas {{ detail.land_use_stat?.year ?? 2019 }} für {{ detail.region.name }}</p>
+        </div>
+      </div>
+
+      <div v-if="landUseStats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <article
+          v-for="item in landUseStats"
+          :key="item.label"
+          class="rounded-lg border border-amber-200 bg-white/80 p-4"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
+          <p class="mt-2 text-2xl font-semibold text-slate-900">{{ item.value }}</p>
+          <p v-if="item.note" class="mt-1 text-xs text-slate-500">{{ item.note }}</p>
+        </article>
+      </div>
+      <p v-else class="text-sm text-amber-700">
+        Für diese Gemeinde sind aktuell keine Flächenatlas-Daten geladen.
       </p>
     </div>
 
@@ -346,6 +372,7 @@ const categoryLabels: Record<string, string> = {
   safety: 'Verkehrssicherheit',
   demographics: 'Demografie/Familie',
   amenities: 'Alltagsnähe',
+  landuse: 'Flächennutzung',
   oepnv: 'ÖPNV'
 }
 
@@ -369,6 +396,10 @@ const categoryThemes: Record<string, { cardClass: string; badgeClass: string }> 
   amenities: {
     cardClass: 'border-emerald-200 bg-emerald-50/70',
     badgeClass: 'bg-emerald-100 text-emerald-800'
+  },
+  landuse: {
+    cardClass: 'border-orange-200 bg-orange-50/70',
+    badgeClass: 'bg-orange-100 text-orange-800'
   },
   oepnv: {
     cardClass: 'border-indigo-200 bg-indigo-50/70',
@@ -397,6 +428,10 @@ function formatPercent(value: number) {
 
 function formatPer10k(value: number) {
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+}
+
+function formatSquareMetersPerCapita(value: number) {
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value) + ' m² je Einwohner'
 }
 
 function formatAirValue(value: number) {
@@ -456,6 +491,53 @@ const demographicStats = computed(() => {
       label: 'Ab 65 Jahren',
       value: formatPercent(seniorShare.raw_value),
       note: 'laut Destatis-Indikator'
+    })
+  }
+
+  return items
+})
+
+const landUseStats = computed(() => {
+  if (!detail.value?.land_use_stat) {
+    return []
+  }
+
+  const stat = detail.value.land_use_stat
+  const items: Array<{ label: string; value: string; note?: string }> = []
+
+  if (stat.forest_share_pct !== null) {
+    items.push({
+      label: 'Waldanteil',
+      value: formatPercent(stat.forest_share_pct),
+      note: `Anteil an der Gemeindefläche (${stat.year})`
+    })
+  }
+  if (stat.settlement_transport_share_pct !== null) {
+    items.push({
+      label: 'Siedlung und Verkehr',
+      value: formatPercent(stat.settlement_transport_share_pct),
+      note: `Anteil an der Gemeindefläche (${stat.year})`
+    })
+  }
+  if (stat.agriculture_share_pct !== null) {
+    items.push({
+      label: 'Landwirtschaft',
+      value: formatPercent(stat.agriculture_share_pct),
+      note: `Anteil an der Gemeindefläche (${stat.year})`
+    })
+  }
+  if (stat.transport_share_pct !== null) {
+    items.push({
+      label: 'Verkehrsfläche',
+      value: formatPercent(stat.transport_share_pct),
+      note: `Anteil an der Gemeindefläche (${stat.year})`
+    })
+  }
+  if (stat.settlement_transport_sqm_per_capita !== null) {
+    items.push({
+      label: 'Siedlung und Verkehr je Einwohner',
+      value: formatSquareMetersPerCapita(stat.settlement_transport_sqm_per_capita),
+      note: `Quadratmeter je Einwohner (${stat.year})`
     })
   }
 
