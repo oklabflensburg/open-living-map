@@ -909,6 +909,7 @@ def _write_indicator(
     unit: str,
     direction: str,
     methodology: str,
+    normalization_mode: str,
     values: list[tuple[int, float]],
 ) -> None:
     with with_session() as session:
@@ -919,6 +920,7 @@ def _write_indicator(
             category=category,
             unit=unit,
             direction=direction,
+            normalization_mode=normalization_mode,
             source_name="OpenData OePNV (GTFS)",
             source_url=SOURCE_URL,
             methodology=methodology,
@@ -929,7 +931,7 @@ def _write_indicator(
             return
 
         raw_values = [raw for _, raw in values]
-        normalized_values = normalize(raw_values, direction)
+        normalized_values = normalize(raw_values, direction, mode=normalization_mode)
         for (region_id, raw), norm in zip(values, normalized_values):
             quality_flag = "ok" if raw > 0 else "low_coverage"
             upsert_region_indicator_value(
@@ -1009,6 +1011,7 @@ def main() -> None:
             category="oepnv",
             unit="stops_per_10k",
             direction="higher_is_better",
+            normalization_mode="log",
             methodology=(
                 "GTFS-CSV-Dateien werden direkt nach PostgreSQL geladen. Haltestellen werden der naechsten "
                 "Gemeindegeometrie via PostGIS zugeordnet, mit Zentroid-Fallback ausserhalb der Polygonflaechen, "
@@ -1023,6 +1026,7 @@ def main() -> None:
             category="oepnv",
             unit="departures_per_10k",
             direction="higher_is_better",
+            normalization_mode="log",
             methodology=(
                 "GTFS stop_times/trips/calendar werden in PostGIS per SQL aggregiert. "
                 "Service-Kalender wird als Wochenanteilsgewicht genutzt; Ergebnis je 10.000 Einwohner auf Gemeindeebene."
@@ -1036,6 +1040,7 @@ def main() -> None:
             category="oepnv",
             unit="index_0_100",
             direction="higher_is_better",
+            normalization_mode="linear",
             methodology=(
                 "Regelmaessigkeitsindex aus 15-Minuten-Bins pro Haltestelle auf Basis von GTFS stop_times in SQL. "
                 "Aggregation je Gemeinde gewichtet mit Abfahrtsvolumen."

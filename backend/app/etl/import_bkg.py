@@ -30,6 +30,15 @@ XREPOSITORY_AGS_API_URL = (
     "https://www.xrepository.de/api/xrepository/"
     "urn%3Ade%3Abund%3Adestatis%3Abevoelkerungsstatistik%3Aschluessel%3Aags"
 )
+XREPOSITORY_KREIS_URN = "urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis_2025-03-31"
+XREPOSITORY_KREIS_DETAILS_URL = (
+    "https://www.xrepository.de/details/urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis_2025-03-31"
+)
+XREPOSITORY_KREIS_JSON_URL = (
+    "https://www.xrepository.de/api/xrepository/"
+    "urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis_2025-03-31/"
+    "download/Kreis_2025-03-31.json"
+)
 WFS_VERSION = "2.0.0"
 WFS_PAGE_SIZE = 5000
 WIKIDATA_BATCH_SIZE = 50
@@ -186,6 +195,42 @@ def _state_name_from_code(code: str | None) -> str:
     return STATE_NAMES.get(code, "Unbekannt")
 
 
+def _district_name_from_props(props: dict[str, Any]) -> str | None:
+    value = _get_prop(
+        props,
+        [
+            "gen_krs",
+            "krs_name",
+            "kreis_name",
+            "landkreis",
+            "name_krs",
+            "gen_kreis",
+            "kreis",
+            "bez_krs",
+        ],
+    )
+    if value is None:
+        return None
+    district_name = str(value).strip()
+    return district_name or None
+
+
+def _district_column_name(available_columns: set[str]) -> str | None:
+    for column in [
+        "gen_krs",
+        "krs_name",
+        "kreis_name",
+        "landkreis",
+        "name_krs",
+        "gen_kreis",
+        "kreis",
+        "bez_krs",
+    ]:
+        if column in available_columns:
+            return column
+    return None
+
+
 def fetch_xrepository_ags_metadata() -> dict[str, str] | None:
     try:
         response = httpx.get(XREPOSITORY_AGS_API_URL, timeout=30.0)
@@ -209,6 +254,183 @@ def fetch_xrepository_ags_metadata() -> dict[str, str] | None:
         "latest_version": latest_version,
         "source_url": XREPOSITORY_AGS_DETAILS_URL,
     }
+
+
+def _element_text(element: ElementTree.Element | None) -> str | None:
+    if element is None or element.text is None:
+        return None
+    value = element.text.strip()
+    return value or None
+
+
+def _parse_genericode_columns(root: ElementTree.Element) -> dict[str, str]:
+    columns: dict[str, str] = {}
+    for column in root.findall(".//{*}Column"):
+        column_id = column.attrib.get("Id") or column.attrib.get("id")
+        if not column_id:
+            continue
+        short_name = _element_text(column.find(".//{*}ShortName"))
+        long_name = _element_text(column.find(".//{*}LongName"))
+        canonical_uri = _element_text(column.find(".//{*}CanonicalUri"))
+        identifier = short_name or long_name or canonical_uri or column_id
+        columns[column_id] = identifier.upper()
+    return columns
+
+
+def _value_texts(element: ElementTree.Element) -> list[str]:
+    texts: list[str] = []
+    for child in element.iter():
+        if child.text is None:
+            continue
+        value = child.text.strip()
+        if value:
+            texts.append(value)
+    return texts
+
+
+def _parse_genericode_rows(xml_text: str) -> dict[str, str]:
+    root = ElementTree.fromstring(xml_text)
+    column_names = _parse_genericode_columns(root)
+    district_names: dict[str, str] = {}
+    for row in root.findall(".//{*}Row"):
+        values: dict[str, str] = {}
+        for value in row.findall(".//{*}Value"):
+            column_ref = value.attrib.get("ColumnRef") or value.attrib.get("columnRef")
+            if not column_ref:
+                continue
+            value_text_candidates = _value_texts(value)
+            simple_value = next((candidate for candidate in value_text_candidates if candidate), None)
+            if simple_value:
+                values[column_names.get(column_ref, column_ref).upper()] = simple_value
+        if not values:
+            continue
+        code = next(
+            (
+                values[key]
+                for key in [
+                    "SCHLUESSEL",
+                    "CODE",
+                    "KEY",
+                    "IDENTIFIER",
+                    "EMPFOHLENE CODESPALTE",
+                ]
+                if key in values and re.fullmatch(r"\d{5}", values[key])
+            ),
+            None,
+        )
+        if not code:
+            code = next((value for value in values.values() if re.fullmatch(r"\d{5}", value)), None)
+        name = next(
+            (
+                values[key]
+                for key in [
+                    "BEZEICHNUNG",
+                    "NAME",
+                    "GEN",
+                    "LANGNAME",
+                    "KURZNAME",
+                ]
+                if key in values and values[key]
+            ),
+            None,
+        )
+        if not name:
+            text_candidates = [
+                value
+                for value in values.values()
+                if value
+                and not re.fullmatch(r"\d{5}", value)
+                and not value.lower().startswith("urn:")
+                and "http" not in value.lower()
+                and re.search(r"[A-Za-zÄÖÜäöüß]", value)
+            ]
+            if text_candidates:
+                name = max(text_candidates, key=len)
+        if code and name:
+            district_names[code] = name.strip()
+    return district_names
+
+
+def fetch_xrepository_kreis_mapping() -> dict[str, str]:
+    try:
+        response = httpx.get(XREPOSITORY_KREIS_JSON_URL, timeout=30.0)
+        response.raise_for_status()
+        payload = response.json()
+        mapping: dict[str, str] = {}
+        if isinstance(payload, dict) and isinstance(payload.get("daten"), list) and isinstance(payload.get("spalten"), list):
+            columns = [
+                (
+                    str(column.get("spaltennameTechnisch") or column.get("spaltennameLang") or "")
+                    .strip()
+                    .upper()
+                )
+                for column in payload["spalten"]
+                if isinstance(column, dict)
+            ]
+            code_index = next(
+                (index for index, name in enumerate(columns) if name == "SCHLUESSEL"),
+                None,
+            )
+            name_index = next(
+                (index for index, name in enumerate(columns) if name in {"BEZEICHNUNG", "NAME", "GEN"}),
+                None,
+            )
+            if code_index is not None and name_index is not None:
+                for row in payload["daten"]:
+                    if not isinstance(row, list):
+                        continue
+                    if max(code_index, name_index) >= len(row):
+                        continue
+                    code = str(row[code_index]).strip() if row[code_index] is not None else ""
+                    name = str(row[name_index]).strip() if row[name_index] is not None else ""
+                    if re.fullmatch(r"\d{5}", code) and name:
+                        mapping[code] = name
+        elif isinstance(payload, list):
+            for row in payload:
+                if not isinstance(row, dict):
+                    continue
+                code = next(
+                    (
+                        str(row.get(key)).strip()
+                        for key in ["SCHLUESSEL", "schluessel", "code", "CODE", "id", "ID"]
+                        if row.get(key) is not None and re.fullmatch(r"\d{5}", str(row.get(key)).strip())
+                    ),
+                    None,
+                )
+                name = next(
+                    (
+                        str(row.get(key)).strip()
+                        for key in ["BEZEICHNUNG", "bezeichnung", "NAME", "name", "GEN", "gen"]
+                        if row.get(key) not in (None, "")
+                    ),
+                    None,
+                )
+                if code and name:
+                    mapping[code] = name
+        if mapping:
+            logger.info("Kreis-Referenz aus XRepository geladen (%s Eintraege)", len(mapping))
+            return mapping
+        logger.warning("XRepository Kreisreferenz lieferte keine parsebaren JSON-Eintraege.")
+        return {}
+    except Exception as exc:
+        logger.warning("XRepository Kreisreferenzabruf fehlgeschlagen: %s", exc)
+        return {}
+
+
+def apply_xrepository_district_names(rows: list[dict[str, object]], district_mapping: dict[str, str]) -> None:
+    if not district_mapping:
+        return
+    for row in rows:
+        district_name = row.get("district_name")
+        if district_name not in (None, ""):
+            continue
+        ars = normalize_ars(str(row["ars"]))
+        district_code = ars[:5] if len(ars) >= 5 else None
+        if not district_code:
+            continue
+        mapped_name = district_mapping.get(district_code)
+        if mapped_name:
+            row["district_name"] = mapped_name
 
 def upsert_regions(session: Session, rows: Iterable[dict[str, object]]) -> None:
     count = 0
@@ -519,6 +741,7 @@ def _row_from_feature(feature: dict[str, Any]) -> dict[str, object] | None:
     name = _get_prop(props, ["gen", "name", "gemeinde_name", "bezeichnung"]) or f"Gemeinde {ags_str}"
     state_code = str(_get_prop(props, ["sn_l", "state_code"]) or ags_str[:2]).zfill(2)
     state_name = str(_get_prop(props, ["gen_land", "land_name"]) or _state_name_from_code(state_code))
+    district_name = _district_name_from_props(props)
 
     ew = _safe_int(_get_prop(props, ["ewz", "ew", "einwohner"]))
     area = _safe_float(_get_prop(props, ["kfl", "flaeche", "shape_area"]))
@@ -533,6 +756,7 @@ def _row_from_feature(feature: dict[str, Any]) -> dict[str, object] | None:
         "level": "gemeinde",
         "state_code": state_code,
         "state_name": state_name,
+        "district_name": district_name,
         "population": ew,
         "area_km2": area,
         "centroid_lat": lat,
@@ -554,18 +778,21 @@ def fetch_bkg_regions_from_postgis(session: Session) -> list[dict[str, object]]:
         (column for column in ["kfl", "flaeche", "shape_area", "area_km2"] if column in available_columns),
         None,
     )
+    district_column = _district_column_name(available_columns)
     population_expr = f"{population_column} AS population" if population_column else "NULL::bigint AS population"
     area_expr = (
         f"{area_column} AS area_km2"
         if area_column
         else f"ROUND(CAST(ST_Area({geometry_column}::geography) / 1000000.0 AS numeric), 2) AS area_km2"
     )
+    district_expr = f"{district_column} AS district_name" if district_column else "NULL::text AS district_name"
     sql = sa_text(
         f"""
         SELECT
             ags,
             gen AS name,
             LPAD(COALESCE(CAST(sn_l AS text), SUBSTRING(ags FROM 1 FOR 2)), 2, '0') AS state_code,
+            {district_expr},
             {population_expr},
             {area_expr},
             ROUND(CAST(ST_Y(ST_Centroid({geometry_column})) AS numeric), 6) AS centroid_lat,
@@ -595,6 +822,7 @@ def fetch_bkg_regions_from_postgis(session: Session) -> list[dict[str, object]]:
                 "level": "gemeinde",
                 "state_code": state_code,
                 "state_name": _state_name_from_code(state_code),
+                "district_name": str(record["district_name"]).strip() if record["district_name"] else None,
                 "population": _safe_int(record["population"]),
                 "area_km2": _safe_float(record["area_km2"]),
                 "centroid_lat": _safe_float(record["centroid_lat"]),
@@ -606,10 +834,12 @@ def fetch_bkg_regions_from_postgis(session: Session) -> list[dict[str, object]]:
 
 
 def fetch_bkg_regions() -> list[dict[str, object]]:
+    district_mapping = fetch_xrepository_kreis_mapping()
     with Session(engine) as session:
         try:
             rows = fetch_bkg_regions_from_postgis(session)
             if rows:
+                apply_xrepository_district_names(rows, district_mapping)
                 logger.info(
                     "BKG Gemeinde-Import erfolgreich aus PostGIS-Tabelle %s (gf=%s, %s Gemeinden)",
                     settings.bkg_municipality_table,
@@ -657,6 +887,7 @@ def fetch_bkg_regions() -> list[dict[str, object]]:
             rows = [_row_from_feature(feature) for feature in features]
             rows = [row for row in rows if row is not None]
             if rows:
+                apply_xrepository_district_names(rows, district_mapping)
                 logger.info("BKG WFS Gemeinde-Import erfolgreich mit Layer %s (%s Gemeinden)", type_name, len(rows))
                 return rows
         except Exception as exc:

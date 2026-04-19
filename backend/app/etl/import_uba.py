@@ -384,6 +384,7 @@ def main() -> None:
                 category="air",
                 unit="ug/m3",
                 direction="lower_is_better",
+                normalization_mode="robust_percentile",
                 source_name="Umweltbundesamt Luftdaten API v4",
                 source_url="https://luftdaten.umweltbundesamt.de/api/air-data/v4/doc",
                 methodology=(
@@ -398,7 +399,7 @@ def main() -> None:
             )
 
             raw_values = [raw for _, raw in values]
-            normalized_values = normalize(raw_values, "lower_is_better")
+            normalized_values = normalize(raw_values, "lower_is_better", mode="robust_percentile")
             _batch_write_indicator_values(
                 session,
                 indicator_id=indicator.id,

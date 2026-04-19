@@ -5,6 +5,7 @@ export interface Region {
   level: string
   state_code: string
   state_name: string
+  district_name: string | null
   population: number | null
   area_km2: number | null
   centroid_lat: number | null
@@ -32,6 +33,9 @@ export interface RecommendationItem {
   ars: string
   slug: string
   name: string
+  level: string
+  state_name: string
+  district_name: string | null
   centroid_lat: number | null
   centroid_lon: number | null
   score_total: number
@@ -117,6 +121,7 @@ export interface IndicatorMetadata {
   category: string
   unit: string
   direction: string
+  normalization_mode: string
   source_name: string
   source_url: string
   methodology: string

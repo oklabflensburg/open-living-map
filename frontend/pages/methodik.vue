@@ -65,13 +65,14 @@
           separat auf eine gemeinsame Skala von 0 bis 100 transformiert.
         </p>
         <p>
-          Technisch geschieht das als lineare Min-Max-Normierung über alle Regionen eines Zeitstands:
-          Der kleinste beobachtete Wert wird zu 0, der größte zu 100. Liegen alle Werte identisch vor, wird
-          standardmäßig 50 vergeben.
+          Technisch geschieht das als logarithmische Min-Max-Normierung über alle Regionen eines Zeitstands:
+          Zuerst werden die Rohwerte logarithmisch gestaucht, damit extreme Ausreißer die Skala nicht dominieren.
+          Anschließend wird der kleinste beobachtete Wert zu 0 und der größte zu 100. Liegen alle Werte identisch
+          vor, wird standardmäßig 50 vergeben.
         </p>
         <div class="rounded-lg bg-slate-50 p-4 text-xs text-slate-700">
           <p class="font-semibold">Vereinfachte Formel</p>
-          <p class="mt-1">Score = ((Wert − Minimum) / (Maximum − Minimum)) × 100</p>
+          <p class="mt-1">Score = ((log(1 + Wert) − Minimum) / (Maximum − Minimum)) × 100</p>
           <p class="mt-2">
             Für Indikatoren mit `lower_is_better` wird das Ergebnis anschließend invertiert. Dann gilt also:
             wenig NO₂, wenig PM10, wenig Unfälle oder wenig Hitzetage ergeben einen höheren Score.
@@ -168,7 +169,13 @@
             target="_blank">OSM Copyright</a>.
         </p>
         <p>
-          Weitere Hinweise zu Lizenzen und Attribution der genutzten Datenquellen stehen in der README des Projekts.
+          Weitere Hinweise zu Lizenzen und Attribution der genutzten Datenquellen stehen in der
+          <a
+            href="https://github.com/oklabflensburg/open-living-map#readme"
+            class="text-blue-700 underline"
+            target="_blank"
+            rel="noreferrer"
+          >README des Projekts</a>.
         </p>
       </div>
     </div>
@@ -233,6 +240,7 @@ useHead(() => ({
 const sources = [
   'https://sgx.geodatenzentrum.de/wfs_vg250-ew',
   'https://www.xrepository.de/details/urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:ags',
+  'https://www.xrepository.de/details/urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis',
   'https://www.regionalstatistik.de/genesis/online',
   'https://www.regionalstatistik.de/genesisws/rest/2020/data/table',
   'https://opendata.dwd.de/',

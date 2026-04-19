@@ -13,6 +13,7 @@ class IndicatorDefinition(SQLModel, table=True):
     category: str
     unit: str
     direction: str
+    normalization_mode: str = Field(default="log")
     source_name: str
     source_url: str
     methodology: str

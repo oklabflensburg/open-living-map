@@ -14,6 +14,7 @@ class RegionBase(BaseModel):
     level: str
     state_code: str
     state_name: str
+    district_name: str | None
     population: int | None
     area_km2: float | None
     centroid_lat: float | None

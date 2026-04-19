@@ -1,4 +1,5 @@
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,7 @@ from sqlmodel import Session, select
 from sqlalchemy import delete
 
 from app.core.config import settings
-from app.core.db import engine
+from app.core.db import engine, ensure_indicator_schema_compatibility
 from app.models.indicator import IndicatorDefinition, RegionIndicatorValue
 from app.models.region import Region
 
@@ -51,6 +52,7 @@ def get_or_create_indicator(
     category: str,
     unit: str,
     direction: str,
+    normalization_mode: str = "log",
     source_name: str,
     source_url: str,
     methodology: str,
@@ -61,6 +63,7 @@ def get_or_create_indicator(
         existing.category = category
         existing.unit = unit
         existing.direction = direction
+        existing.normalization_mode = normalization_mode
         existing.source_name = source_name
         existing.source_url = source_url
         existing.methodology = methodology
@@ -75,6 +78,7 @@ def get_or_create_indicator(
         category=category,
         unit=unit,
         direction=direction,
+        normalization_mode=normalization_mode,
         source_name=source_name,
         source_url=source_url,
         methodology=methodology,
@@ -135,7 +139,7 @@ def clear_indicator_values(session: Session, *, indicator_id: int, period: str) 
     session.commit()
 
 
-def normalize(values: list[float], direction: str) -> list[float]:
+def _min_max_scale(values: list[float], direction: str) -> list[float]:
     if not values:
         return []
     min_val = min(values)
@@ -149,5 +153,64 @@ def normalize(values: list[float], direction: str) -> list[float]:
     return [round(value, 2) for value in scaled]
 
 
+def _log_transform(values: list[float]) -> list[float]:
+    min_val = min(values)
+    if min_val < 0:
+        offset = abs(min_val) + 1.0
+        return [math.log(value + offset) for value in values]
+    return [math.log1p(value) for value in values]
+
+
+def _percentile(sorted_values: list[float], percentile: float) -> float:
+    if not sorted_values:
+        raise ValueError("sorted_values must not be empty")
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+
+    rank = (len(sorted_values) - 1) * percentile
+    lower_index = int(math.floor(rank))
+    upper_index = int(math.ceil(rank))
+    if lower_index == upper_index:
+        return sorted_values[lower_index]
+    weight = rank - lower_index
+    return sorted_values[lower_index] * (1 - weight) + sorted_values[upper_index] * weight
+
+
+def _robust_percentile_scale(values: list[float], direction: str) -> list[float]:
+    if not values:
+        return []
+    sorted_values = sorted(values)
+    lower = _percentile(sorted_values, 0.05)
+    upper = _percentile(sorted_values, 0.95)
+    if upper == lower:
+        return [50.0 for _ in values]
+
+    clipped = [min(max(value, lower), upper) for value in values]
+    return _min_max_scale(clipped, direction)
+
+
+def normalize(values: list[float], direction: str, mode: str = "log") -> list[float]:
+    if mode == "linear":
+        return _min_max_scale(values, direction)
+    if mode == "log":
+        return _min_max_scale(_log_transform(values), direction)
+    if mode == "robust_percentile":
+        return _robust_percentile_scale(values, direction)
+    raise ValueError(f"Unknown normalization mode: {mode}")
+
+
+def normalize_log(values: list[float], direction: str) -> list[float]:
+    return normalize(values, direction, mode="log")
+
+
+def normalize_linear(values: list[float], direction: str) -> list[float]:
+    return normalize(values, direction, mode="linear")
+
+
+def normalize_robust_percentile(values: list[float], direction: str) -> list[float]:
+    return normalize(values, direction, mode="robust_percentile")
+
+
 def with_session() -> Session:
+    ensure_indicator_schema_compatibility()
     return Session(engine)

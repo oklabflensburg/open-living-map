@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO)
 CATEGORY_MAPPING = {
     "pharmacy": [("amenity", "pharmacy")],
     "doctors": [("amenity", "doctors")],
+    "hospital": [("amenity", "hospital")],
     "childcare": [("amenity", "kindergarten")],
     "school": [("amenity", "school")],
     "supermarket": [("shop", "supermarket")],
@@ -51,6 +52,29 @@ CATEGORY_MAPPING = {
     "library": [("amenity", "library")],
 }
 
+CATEGORY_WEIGHTS = {
+    "pharmacy": 1.8,
+    "doctors": 1.8,
+    "hospital": 1.8,
+    "childcare": 1.7,
+    "school": 1.7,
+    "supermarket": 1.8,
+    "station": 1.0,
+    "transit_stop": 1.6,
+    "playground": 0.9,
+    "park": 0.5,
+    "museum": 0.3,
+    "theatre": 0.3,
+    "sports_facility": 0.7,
+    "theme_park": 0.2,
+    "nature_reserve": 0.3,
+    "airfield": 0.2,
+    "restaurant": 0.7,
+    "library": 0.8,
+}
+
+TOTAL_CATEGORY_WEIGHT = sum(CATEGORY_WEIGHTS.values())
+
 OSM_TAG_COLUMNS = sorted(
     {
         osm_key
@@ -60,18 +84,9 @@ OSM_TAG_COLUMNS = sorted(
 )
 
 
-def _build_tag_match_condition(alias: str, mappings: list[tuple[str, str]]) -> tuple[str, dict[str, str]]:
-    clauses: list[str] = []
-    params: dict[str, str] = {}
-    for index, (osm_key, osm_value) in enumerate(mappings):
-        key_param = f"osm_key_{index}"
-        value_param = f"osm_value_{index}"
-        clauses.append(
-            f'COALESCE({alias}."{osm_key}", {alias}.tags -> :{key_param}) = :{value_param}'
-        )
-        params[key_param] = osm_key
-        params[value_param] = osm_value
-    return "(" + " OR ".join(clauses) + ")", params
+def _build_category_weight_sql(column: str = "a.category") -> str:
+    clauses = [f"WHEN '{category}' THEN {weight}" for category, weight in CATEGORY_WEIGHTS.items()]
+    return f"CASE {column} " + " ".join(clauses) + " ELSE 1.0 END"
 
 
 def ensure_osm_tables() -> None:
@@ -91,10 +106,37 @@ def ensure_osm_tables() -> None:
                 """
             )
         )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS osm.boundary_3857_stage (
+                    ags varchar(12) PRIMARY KEY,
+                    population integer NULL,
+                    geom geometry(MultiPolygon, 3857) NOT NULL
+                );
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS osm.amenity_poi_stage (
+                    category varchar NOT NULL,
+                    poi_id varchar NOT NULL,
+                    geom geometry(Point, 3857) NOT NULL,
+                    PRIMARY KEY (category, poi_id)
+                );
+                """
+            )
+        )
 
 
 def ensure_osm_indexes() -> None:
     index_statements = [
+        (
+            "geo_municipality_boundary_geom_gix",
+            "CREATE INDEX IF NOT EXISTS municipality_boundary_geom_idx ON geo.municipality_boundary USING gist (geom)",
+        ),
         (
             "osm_planet_osm_point_way_gix",
             "CREATE INDEX IF NOT EXISTS planet_osm_point_way_gix ON osm.planet_osm_point USING gist (way)",
@@ -102,6 +144,18 @@ def ensure_osm_indexes() -> None:
         (
             "osm_planet_osm_polygon_way_gix",
             "CREATE INDEX IF NOT EXISTS planet_osm_polygon_way_gix ON osm.planet_osm_polygon USING gist (way)",
+        ),
+        (
+            "osm_boundary_3857_stage_geom_gix",
+            "CREATE INDEX IF NOT EXISTS boundary_3857_stage_geom_gix ON osm.boundary_3857_stage USING gist (geom)",
+        ),
+        (
+            "osm_amenity_poi_stage_geom_gix",
+            "CREATE INDEX IF NOT EXISTS amenity_poi_stage_geom_gix ON osm.amenity_poi_stage USING gist (geom)",
+        ),
+        (
+            "osm_amenity_poi_stage_category_idx",
+            "CREATE INDEX IF NOT EXISTS amenity_poi_stage_category_idx ON osm.amenity_poi_stage (category)",
         ),
     ]
     for table_name in ("planet_osm_point", "planet_osm_polygon"):
@@ -138,6 +192,116 @@ def _source_tables_ready() -> bool:
     return bool(planet_point_exists and planet_polygon_exists and boundary_exists)
 
 
+def _build_stage_scan_queries(table_name: str, alias: str, geom_sql: str) -> tuple[list[str], dict[str, str]]:
+    grouped_by_key: dict[str, dict[str, set[str]]] = {}
+    for category, mappings in CATEGORY_MAPPING.items():
+        for osm_key, osm_value in mappings:
+            grouped_by_key.setdefault(osm_key, {}).setdefault(category, set()).add(osm_value)
+
+    queries: list[str] = []
+    params: dict[str, str] = {}
+
+    for osm_key, category_values in grouped_by_key.items():
+        all_values = sorted({value for values in category_values.values() for value in values})
+        prefilter_placeholders: list[str] = []
+        for index, value in enumerate(all_values):
+            param_name = f"{table_name}_{osm_key}_prefilter_{index}"
+            prefilter_placeholders.append(f":{param_name}")
+            params[param_name] = value
+
+        lateral_rows: list[str] = []
+        for category, values in category_values.items():
+            value_placeholders: list[str] = []
+            for index, value in enumerate(sorted(values)):
+                param_name = f"{table_name}_{osm_key}_{category}_{index}"
+                value_placeholders.append(f":{param_name}")
+                params[param_name] = value
+            lateral_rows.append(
+                f"('{category}', {alias}.\"{osm_key}\" IN ({', '.join(value_placeholders)}))"
+            )
+
+        queries.append(
+            f"""
+            SELECT DISTINCT
+                matched.category AS category,
+                '{table_name}:' || {alias}.osm_id::text AS poi_id,
+                {geom_sql} AS geom
+            FROM osm.{table_name} {alias}
+            CROSS JOIN LATERAL (
+                VALUES
+                    {", ".join(lateral_rows)}
+            ) AS matched(category, is_match)
+            WHERE {alias}.way IS NOT NULL
+              AND {alias}."{osm_key}" IN ({", ".join(prefilter_placeholders)})
+              AND matched.is_match
+            """
+        )
+
+    return queries, params
+
+
+def rebuild_osm_stage_tables() -> None:
+    point_scan_queries, point_params = _build_stage_scan_queries(
+        table_name="planet_osm_point",
+        alias="point",
+        geom_sql="point.way",
+    )
+    polygon_scan_queries, polygon_params = _build_stage_scan_queries(
+        table_name="planet_osm_polygon",
+        alias="polygon",
+        geom_sql="ST_PointOnSurface(polygon.way)",
+    )
+    with engine.begin() as connection:
+        logger.info("Leere OSM-Stagingtabellen")
+        connection.execute(text("TRUNCATE osm.boundary_3857_stage, osm.amenity_poi_stage"))
+
+        logger.info("Materialisiere Gemeindegrenzen in EPSG:3857")
+        connection.execute(
+            text(
+                """
+                INSERT INTO osm.boundary_3857_stage (ags, population, geom)
+                SELECT
+                    b.ags,
+                    r.population,
+                    ST_Transform(b.geom, 3857) AS geom
+                FROM geo.municipality_boundary b
+                JOIN region r ON r.ars = b.ags
+                WHERE b.geom IS NOT NULL
+                """
+            )
+        )
+
+        logger.info("Materialisiere relevante OSM-POIs für alle Kategorien")
+        connection.execute(
+            text(
+                f"""
+                INSERT INTO osm.amenity_poi_stage (category, poi_id, geom)
+                SELECT category, poi_id, geom
+                FROM (
+                    {' UNION ALL '.join(point_scan_queries)}
+                ) staged
+                WHERE geom IS NOT NULL
+                ON CONFLICT (category, poi_id) DO NOTHING
+                """
+            ),
+            point_params,
+        )
+        connection.execute(
+            text(
+                f"""
+                INSERT INTO osm.amenity_poi_stage (category, poi_id, geom)
+                SELECT category, poi_id, geom
+                FROM (
+                    {' UNION ALL '.join(polygon_scan_queries)}
+                ) staged
+                WHERE geom IS NOT NULL
+                ON CONFLICT (category, poi_id) DO NOTHING
+                """
+            ),
+            polygon_params,
+        )
+
+
 def build_real_amenity_aggregation() -> bool:
     ensure_osm_tables()
     if not _source_tables_ready():
@@ -147,82 +311,40 @@ def build_real_amenity_aggregation() -> bool:
         return False
 
     ensure_osm_indexes()
+    rebuild_osm_stage_tables()
 
     with engine.begin() as connection:
         logger.info("Leere alte OSM-Aggregation osm.region_amenity_agg")
         connection.execute(text("TRUNCATE osm.region_amenity_agg"))
-        for category, mappings in CATEGORY_MAPPING.items():
-            point_condition, point_params = _build_tag_match_condition("point", mappings)
-            polygon_condition, polygon_params = _build_tag_match_condition("polygon", mappings)
-            logger.info(
-                "Aggregiere OSM-Kategorie %s (%s Mapping(s))",
-                category,
-                len(mappings),
+        logger.info("Aggregiere OSM-Kategorien in einem gemeinsamen räumlichen Durchlauf")
+        connection.execute(
+            text(
+                """
+                INSERT INTO osm.region_amenity_agg (ars, category, count_total, per_10k, updated_at)
+                SELECT
+                    b.ags AS ars,
+                    p.category AS category,
+                    COUNT(DISTINCT p.poi_id)::int AS count_total,
+                    ROUND(
+                        (
+                            COUNT(DISTINCT p.poi_id)::numeric
+                            / GREATEST(COALESCE(NULLIF(b.population, 0), 10000), 10000)
+                        ) * 10000,
+                        2
+                    ) AS per_10k,
+                    now()
+                FROM osm.boundary_3857_stage b
+                JOIN osm.amenity_poi_stage p
+                  ON p.geom && b.geom
+                 AND ST_Covers(b.geom, p.geom)
+                GROUP BY b.ags, b.population, p.category
+                ON CONFLICT (ars, category) DO UPDATE
+                SET count_total = EXCLUDED.count_total,
+                    per_10k = EXCLUDED.per_10k,
+                    updated_at = now();
+                """
             )
-            connection.execute(
-                text(
-                    f"""
-                    WITH boundaries AS (
-                        SELECT
-                            b.ags,
-                            r.population,
-                            ST_Transform(b.geom, 3857) AS geom
-                        FROM geo.municipality_boundary b
-                        JOIN region r ON r.ars = b.ags
-                    )
-                    INSERT INTO osm.region_amenity_agg (ars, category, count_total, per_10k, updated_at)
-                    SELECT
-                        b.ags AS ars,
-                        :category AS category,
-                        COUNT(DISTINCT p.poi_id)::int AS count_total,
-                        ROUND(
-                            (
-                                COUNT(DISTINCT p.poi_id)::numeric
-                                / GREATEST(COALESCE(NULLIF(b.population, 0), 10000), 10000)
-                            ) * 10000,
-                            2
-                        ) AS per_10k,
-                        now()
-                    FROM boundaries b
-                    JOIN LATERAL (
-                        SELECT 'point:' || point.osm_id::text AS poi_id
-                        FROM osm.planet_osm_point point
-                        WHERE point.way && b.geom
-                          AND ST_Covers(b.geom, point.way)
-                          AND {point_condition}
-
-                        UNION ALL
-
-                        SELECT 'polygon:' || polygon.osm_id::text AS poi_id
-                        FROM osm.planet_osm_polygon polygon
-                        WHERE polygon.way && b.geom
-                          AND ST_Covers(b.geom, ST_PointOnSurface(polygon.way))
-                          AND {polygon_condition}
-                    ) p ON TRUE
-                    GROUP BY b.ags, b.population
-                    ON CONFLICT (ars, category) DO UPDATE
-                    SET count_total = EXCLUDED.count_total,
-                        per_10k = EXCLUDED.per_10k,
-                        updated_at = now();
-                    """
-                ),
-                {"category": category, **point_params, **polygon_params},
-            )
-            category_rows = connection.execute(
-                text(
-                    """
-                    SELECT COUNT(*)
-                    FROM osm.region_amenity_agg
-                    WHERE category = :category
-                    """
-                ),
-                {"category": category},
-            ).scalar() or 0
-            logger.info(
-                "OSM-Kategorie %s abgeschlossen: %s Gemeinden mit Treffern",
-                category,
-                category_rows,
-            )
+        )
         rows_written = connection.execute(text("SELECT COUNT(*) FROM osm.region_amenity_agg")).scalar() or 0
     logger.info("OSM POI-Aggregation geschrieben: %s Gemeinde/Kategorie-Zeilen", rows_written)
     return int(rows_written) > 0
@@ -312,9 +434,10 @@ def build_amenities_indicator() -> None:
             category="amenities",
             unit="per_10k",
             direction="higher_is_better",
+            normalization_mode="log",
             source_name="OpenStreetMap (Geofabrik Extract)",
             source_url="https://download.geofabrik.de/europe/germany.html",
-            methodology="Echte Aggregation der OSM POI-Kategorien pro Gemeinde ueber BKG-Gemeindegeometrien, normiert je 10k Einwohner.",
+            methodology="Echte Aggregation der OSM-POI-Kategorien pro Gemeinde ueber BKG-Gemeindegeometrien. Der Rohwert ist eine fachlich gewichtete Dichte je 10.000 Einwohner, bei der Grundversorgung wie Apotheken, Aerzte, Krankenhaeuser, Supermaerkte, Kitas, Schulen und Haltestellen deutlich staerker zaehlt als Freizeit- oder Spezialangebote. Der normierte Score kombiniert diese Dichte zu 75 Prozent mit der Breite des Angebots, also der Anzahl abgedeckter OSM-Kategorien, zu 25 Prozent. Die Dichte wird logarithmisch normiert, damit Ausreisser grosser Staedte den Score nicht unverhaeltnismaessig dominieren.",
         )
         clear_indicator_values(
             session,
@@ -322,27 +445,32 @@ def build_amenities_indicator() -> None:
             period=settings.default_score_period,
         )
 
-        rows = session.exec(
+        rows = session.execute(
             text(
-                """
+                f"""
                 SELECT
                     r.id AS region_id,
-                    AVG(a.per_10k)::float AS amenities_raw,
+                    (SUM(a.per_10k * {_build_category_weight_sql()}) / :total_category_weight)::float AS amenities_raw,
                     COUNT(*)::int AS category_count
                 FROM region r
                 JOIN osm.region_amenity_agg a
                   ON a.ars = r.ars
                 GROUP BY r.id
                 """
-            )
+            ),
+            {"total_category_weight": TOTAL_CATEGORY_WEIGHT}
         ).all()
         if not rows:
             logger.warning("Keine OSM-Aggregation gefunden, amenities wird nicht geschrieben.")
             return
 
         raw_values = [float(row.amenities_raw) for row in rows]
-        normalized = normalize(raw_values, indicator.direction)
-        for row, norm in zip(rows, normalized):
+        category_counts = [int(row.category_count) for row in rows]
+        density_scores = normalize(raw_values, indicator.direction, mode="log")
+        breadth_scores = normalize([float(count) for count in category_counts], indicator.direction, mode="linear")
+
+        for row, density_score, breadth_score in zip(rows, density_scores, breadth_scores):
+            norm = round((density_score * 0.75) + (breadth_score * 0.25), 2)
             quality_flag = "ok" if int(row.category_count) >= 5 else "low_coverage"
             upsert_region_indicator_value(
                 session,

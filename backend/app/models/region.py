@@ -13,6 +13,7 @@ class Region(SQLModel, table=True):
     level: str = Field(default="kreis")
     state_code: str = Field(max_length=2)
     state_name: str
+    district_name: str | None = None
     population: int | None = None
     area_km2: float | None = None
     centroid_lat: Optional[float] = None

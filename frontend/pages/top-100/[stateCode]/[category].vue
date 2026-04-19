@@ -14,10 +14,10 @@
       </div>
 
       <div class="flex flex-wrap gap-3">
-        <NuxtLink to="/finder" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400">
+        <NuxtLink to="/finder" active-class="" exact-active-class="" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400">
           Eigene Gewichtung
         </NuxtLink>
-        <NuxtLink to="/" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+        <NuxtLink to="/" active-class="" exact-active-class="" class="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
           Alle Toplisten
         </NuxtLink>
       </div>
@@ -53,7 +53,6 @@
             <tr>
               <th class="px-4 py-3">Rang</th>
               <th class="px-4 py-3">Region</th>
-              <th class="px-4 py-3">AGS</th>
               <th class="px-4 py-3 text-right">{{ categoryMeta.label }}</th>
               <th class="px-4 py-3 text-right">Gesamtscore</th>
               <th class="px-4 py-3 text-right">Aktion</th>
@@ -64,9 +63,8 @@
               <td class="px-4 py-3 font-semibold text-slate-900">{{ index + 1 }}</td>
               <td class="px-4 py-3">
                 <div class="font-medium text-slate-900">{{ item.name }}</div>
-                <div class="text-xs text-slate-500">{{ scopeName }}</div>
+                <div class="text-xs text-slate-500">{{ locationSubtitle(item) }}</div>
               </td>
-              <td class="px-4 py-3 text-slate-600">{{ item.ars }}</td>
               <td class="px-4 py-3 text-right font-semibold text-slate-900">{{ getRankingScore(item, category).toFixed(1) }}</td>
               <td class="px-4 py-3 text-right text-slate-600">{{ item.score_total.toFixed(1) }}</td>
               <td class="px-4 py-3 text-right">
@@ -166,6 +164,26 @@ useHead(() => ({
 const pending = ref(true)
 const errorMessage = ref('')
 const response = ref<RecommendationResponse | null>(null)
+
+function levelLabel(level: string) {
+  if (level === 'kreisfreie_stadt') {
+    return 'Kreisfreie Stadt'
+  }
+  if (level === 'landkreis' || level === 'kreis') {
+    return 'Landkreis'
+  }
+  if (level === 'gemeinde') {
+    return 'Gemeinde'
+  }
+  return 'Region'
+}
+
+function locationSubtitle(item: RecommendationResponse['items'][number]) {
+  if (item.level === 'gemeinde' && item.district_name) {
+    return `AGS ${item.ars} · ${item.state_name} · ${item.district_name}`
+  }
+  return `AGS ${item.ars} · ${item.state_name} · ${levelLabel(item.level)}`
+}
 
 try {
   response.value = await fetchTopRankings(category, scopeCode, 100)

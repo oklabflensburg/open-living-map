@@ -13,11 +13,13 @@ from app.models.score import RegionScoreSnapshot
 MANDATORY_SOURCE_LINKS = [
     "https://www.opendata-oepnv.de/ht/de/datensaetze",
     "https://www.xrepository.de/details/urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:ags",
+    "https://www.xrepository.de/details/urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis",
 ]
 
 AMENITY_CATEGORY_MAPPING = {
     "pharmacy": [("amenity", "pharmacy")],
     "doctors": [("amenity", "doctors")],
+    "hospital": [("amenity", "hospital")],
     "childcare": [("amenity", "kindergarten")],
     "school": [("amenity", "school")],
     "supermarket": [("shop", "supermarket")],

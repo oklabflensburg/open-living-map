@@ -6,10 +6,10 @@
           MVP Deutschland
         </p>
         <h1 class="text-4xl font-black tracking-tight text-slate-900">
-          Finde passende Kreise und kreisfreie Städte für deinen Alltag.
+          Finde passende Gemeinden und Orte für deinen Alltag.
         </h1>
         <p class="mt-4 text-slate-600">
-          Wohnort-Kompass kombiniert offene Daten aus Klima, Luft, Sicherheit, Demografie, Alltagsnähe und ÖPNV.
+          Wohnort-Kompass kombiniert offene Daten aus Klima, Luft, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.
         </p>
         <div class="mt-6 flex gap-3">
           <NuxtLink to="/finder" class="rounded bg-blue-700 px-5 py-3 font-semibold text-white hover:bg-blue-800">Jetzt starten</NuxtLink>
@@ -20,8 +20,8 @@
         <h2 class="text-lg font-semibold">Was du bekommst</h2>
         <ul class="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-700">
           <li>Top-Ranking basierend auf deinen Gewichtungen</li>
-          <li>Regionale Teil-Scores mit nachvollziehbarer Begründung</li>
-          <li>Vergleich von bis zu 3 Regionen</li>
+          <li>Teil-Scores je Gemeinde mit nachvollziehbarer Begründung</li>
+          <li>Vergleich von bis zu 3 Gemeinden</li>
         </ul>
       </div>
     </div>
@@ -71,7 +71,7 @@ const { siteName, siteDescription, absoluteUrl } = useSiteSeo()
 
 const title = 'Wohnort finden mit offenen Daten'
 const description =
-  'Vergleiche Kreise und kreisfreie Städte in Deutschland nach Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.'
+  'Vergleiche Gemeinden in Deutschland nach Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.'
 
 useSeoMeta({
   title,

@@ -26,6 +26,9 @@ class RecommendationItem(BaseModel):
     ars: str
     slug: str
     name: str
+    level: str
+    state_name: str
+    district_name: str | None = None
     centroid_lat: float | None = None
     centroid_lon: float | None = None
     score_total: float

@@ -2,7 +2,10 @@
   <section v-if="detail" class="space-y-6">
     <div>
       <h1 class="text-2xl font-bold">{{ detail.region.name }}</h1>
-      <p class="text-sm text-slate-500">AGS {{ detail.region.ars }} · {{ detail.region.state_name }}</p>
+      <p class="text-sm text-slate-500">
+        AGS {{ detail.region.ars }} · {{ detail.region.state_name }}
+        <template v-if="detail.region.district_name"> · {{ detail.region.district_name }}</template>
+      </p>
       <div v-if="detail.region.wikipedia_url || detail.region.wikidata_url" class="mt-3 flex flex-wrap gap-3 text-sm">
         <a v-if="detail.region.wikipedia_url" :href="detail.region.wikipedia_url" target="_blank" rel="noreferrer"
           class="font-medium text-sky-700 underline decoration-sky-300 underline-offset-4">
@@ -22,7 +25,7 @@
         badge-class="bg-amber-100 text-amber-800" bar-class="bg-amber-600" />
       <ScoreBar label="Luft" :value="detail.scores.air || 0" card-class="border-sky-200 bg-sky-50/70"
         badge-class="bg-sky-100 text-sky-800" bar-class="bg-sky-600" />
-      <ScoreBar label="Sicherheit" :value="detail.scores.safety || 0" card-class="border-rose-200 bg-rose-50/70"
+      <ScoreBar label="Verkehrssicherheit" :value="detail.scores.safety || 0" card-class="border-rose-200 bg-rose-50/70"
         badge-class="bg-rose-100 text-rose-800" bar-class="bg-rose-600" />
       <ScoreBar label="Demografie" :value="detail.scores.demographics || 0" card-class="border-violet-200 bg-violet-50/70"
         badge-class="bg-violet-100 text-violet-800" bar-class="bg-violet-600" />
@@ -253,19 +256,19 @@ useSeoMeta({
   title: () => (detail.value ? `${detail.value.region.name}` : 'Region'),
   description: () =>
     detail.value
-      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.`
       : 'Region im Wohnort-Kompass',
   ogUrl: () => absoluteUrl(`/region/${String(route.params.slug)}`),
   ogTitle: () => (detail.value ? `${detail.value.region.name} | ${siteName}` : `Region | ${siteName}`),
   ogDescription: () =>
     detail.value
-      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.`
       : 'Region im Wohnort-Kompass',
   ogType: 'article',
   twitterTitle: () => (detail.value ? `${detail.value.region.name} | ${siteName}` : `Region | ${siteName}`),
   twitterDescription: () =>
     detail.value
-      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+      ? `${detail.value.region.name} in ${detail.value.region.state_name}: Scores zu Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.`
       : 'Region im Wohnort-Kompass',
   twitterCard: 'summary'
 })
@@ -274,7 +277,7 @@ useHead(() => {
   const canonicalPath = `/region/${String(route.params.slug)}`
   const region = detail.value?.region
   const description = region
-    ? `${region.name} in ${region.state_name}: Scores zu Klima, Luftqualität, Sicherheit, Demografie, Alltagsnähe und ÖPNV.`
+    ? `${region.name} in ${region.state_name}: Scores zu Klima, Luftqualität, Verkehrssicherheit, Demografie, Alltagsnähe und ÖPNV.`
     : 'Region im Wohnort-Kompass'
 
   const graph: Record<string, unknown>[] = [

@@ -9,6 +9,19 @@ from app.core.config import settings
 engine = create_engine(settings.database_url, echo=False)
 
 
+def ensure_indicator_schema_compatibility() -> None:
+    with Session(engine) as session:
+        session.execute(
+            text(
+                """
+                ALTER TABLE indicator_definition
+                ADD COLUMN IF NOT EXISTS normalization_mode text DEFAULT 'log' NOT NULL;
+                """
+            )
+        )
+        session.commit()
+
+
 def ensure_region_schema_compatibility() -> None:
     with Session(engine) as session:
         session.execute(
@@ -16,6 +29,7 @@ def ensure_region_schema_compatibility() -> None:
                 """
                 ALTER TABLE region
                 ADD COLUMN IF NOT EXISTS slug text,
+                ADD COLUMN IF NOT EXISTS district_name text,
                 ADD COLUMN IF NOT EXISTS wikidata_id text,
                 ADD COLUMN IF NOT EXISTS wikidata_url text,
                 ADD COLUMN IF NOT EXISTS wikipedia_url text;
@@ -40,6 +54,7 @@ def ensure_region_schema_compatibility() -> None:
 
 
 def get_session() -> Generator[Session, None, None]:
+    ensure_indicator_schema_compatibility()
     ensure_region_schema_compatibility()
     with Session(engine) as session:
         yield session

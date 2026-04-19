@@ -29,6 +29,14 @@ ACCIDENT_CATEGORY_KEYS = {
     2: "seriously_injured",
     3: "slightly_injured",
 }
+CITY_STATE_AGGREGATE_AGS = {
+    "02": "02000000",
+    "11": "11000000",
+}
+
+
+def _bounded_normalized_score(value: float) -> float:
+    return round(min(99.9, max(0.1, value)), 2)
 
 
 def _latest_csv_zip_name() -> str | None:
@@ -104,6 +112,8 @@ def _to_region_ars(df: pd.DataFrame) -> pd.Series:
     ars8 = land + reg + district + municipality
     kreisfreie_mask = municipality == "000"
     ars8 = ars8.where(~kreisfreie_mask, (land + reg + district + "000"))
+    for state_code, aggregate_ags in CITY_STATE_AGGREGATE_AGS.items():
+        ars8 = ars8.where(land != state_code, aggregate_ags)
     return ars8.map(normalize_ars)
 
 
@@ -264,11 +274,13 @@ def main() -> None:
             category="safety",
             unit="count",
             direction="lower_is_better",
+            normalization_mode="log",
             source_name="Destatis Unfallatlas",
             source_url="https://www.destatis.de/DE/Service/Statistik-Visualisiert/unfall-atlas.html",
             methodology=(
                 "Unfallorte-CSV (aktuellstes Jahr) wird je Gemeinde aggregiert; "
-                "Gemeindezuordnung ueber ULAND/UREGBEZ/UKREIS/UGEMEINDE -> AGS."
+                "Gemeindezuordnung ueber ULAND/UREGBEZ/UKREIS/UGEMEINDE -> AGS; "
+                "Normierung logarithmisch mit leichtem Floor/Ceiling, damit keine exakten 0.0 oder 100.0 entstehen."
             ),
         )
         clear_indicator_values(
@@ -278,7 +290,10 @@ def main() -> None:
         )
 
         raw_values = [raw for _, raw in rows]
-        normalized_values = normalize(raw_values, indicator.direction)
+        normalized_values = [
+            _bounded_normalized_score(value)
+            for value in normalize(raw_values, indicator.direction, mode="log")
+        ]
         for (region_id, raw), norm in zip(rows, normalized_values):
             upsert_region_indicator_value(
                 session,

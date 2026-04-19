@@ -45,6 +45,7 @@ class GenesisIndicatorSpec:
     source_name: str
     source_url: str
     methodology: str
+    normalization_mode: str = "log"
     # optional explizite Spaltennamen im CSV (falls bekannt)
     ars_column: str | None = None
     value_column: str | None = None
@@ -66,6 +67,7 @@ DEFAULT_INDICATOR_SPECS: list[GenesisIndicatorSpec] = [
         source_name="Regionaldatenbank Deutschland GENESIS",
         source_url="https://www.regionalstatistik.de/genesis/online",
         methodology="Gemeindebevoelkerung je AGS aus Regionalstatistik Tabelle 12411-01-01-5 (31.12., insgesamt).",
+        normalization_mode="log",
         params={
             "regionalvariable": "GEMEIN",
             "classifyingvariable1": "GES",
@@ -84,6 +86,7 @@ DEFAULT_INDICATOR_SPECS: list[GenesisIndicatorSpec] = [
         source_name="Regionaldatenbank Deutschland GENESIS",
         source_url="https://www.regionalstatistik.de/genesis/online",
         methodology="Frauenanteil je Gemeinde aus Regionalstatistik Tabelle 12411-01-01-5 (weiblich / insgesamt).",
+        normalization_mode="linear",
         params={
             "regionalvariable": "GEMEIN",
             "classifyingvariable1": "GES",
@@ -105,6 +108,7 @@ DEFAULT_INDICATOR_SPECS: list[GenesisIndicatorSpec] = [
             "Jugendanteil je Gemeinde aus Regionalstatistik Tabelle 12411-02-03-5 "
             "(unter 3 + 3-6 + 6-10 + 10-15 + 15-18) / insgesamt."
         ),
+        normalization_mode="linear",
         params={
             "regionalvariable": "GEMEIN",
             "classifyingvariable1": "ALTX20",
@@ -125,6 +129,7 @@ DEFAULT_INDICATOR_SPECS: list[GenesisIndicatorSpec] = [
         source_name="Regionaldatenbank Deutschland GENESIS",
         source_url="https://www.regionalstatistik.de/genesis/online",
         methodology="Seniorenanteil je Gemeinde aus Regionalstatistik Tabelle 12411-02-03-5 (65-75 + 75+) / insgesamt.",
+        normalization_mode="linear",
         params={
             "regionalvariable": "GEMEIN",
             "classifyingvariable1": "ALTX20",
@@ -181,6 +186,7 @@ def _load_specs() -> list[GenesisIndicatorSpec]:
                 ),
                 methodology=item.get(
                     "methodology", "Regionalwert je Kreis aus GENESIS Tabelle."),
+                normalization_mode=item.get("normalization_mode", "log"),
                 ars_column=item.get("ars_column"),
                 value_column=item.get("value_column"),
                 params=item.get("params"),
@@ -813,6 +819,7 @@ def main() -> None:
                 category=spec.category,
                 unit=spec.unit,
                 direction=spec.direction,
+                normalization_mode=spec.normalization_mode,
                 source_name=spec.source_name,
                 source_url=spec.source_url,
                 methodology=spec.methodology,
@@ -845,7 +852,7 @@ def main() -> None:
             )
 
             raw_values = [value for _, value in mapped]
-            normalized_values = normalize(raw_values, spec.direction)
+            normalized_values = normalize(raw_values, spec.direction, mode=spec.normalization_mode)
 
             for (region_id, raw), norm in zip(mapped, normalized_values):
                 upsert_region_indicator_value(

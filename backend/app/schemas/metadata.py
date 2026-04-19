@@ -9,6 +9,7 @@ class IndicatorMetadata(BaseModel):
     category: str
     unit: str
     direction: str
+    normalization_mode: str
     source_name: str
     source_url: str
     methodology: str

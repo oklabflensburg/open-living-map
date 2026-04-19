@@ -251,6 +251,7 @@ def main() -> None:
                 category="climate",
                 unit=unit,
                 direction=direction,
+                normalization_mode="robust_percentile",
                 source_name="DWD CDC Daily KL",
                 source_url="https://opendata.dwd.de/",
                 methodology=(
@@ -265,7 +266,7 @@ def main() -> None:
             )
 
             raw_values = [raw for _, raw in values]
-            normalized_values = normalize(raw_values, direction)
+            normalized_values = normalize(raw_values, direction, mode="robust_percentile")
             _batch_write_indicator_values(
                 session,
                 indicator_id=indicator.id,

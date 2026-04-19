@@ -58,6 +58,7 @@ QUALITY_FLAG_LABELS = {
 AMENITY_LABELS = {
     "pharmacy": "Apotheken",
     "doctors": "Ärzte",
+    "hospital": "Krankenhäuser",
     "childcare": "Kitas/Kindergarten",
     "school": "Schulen",
     "supermarket": "Supermärkte",
@@ -80,6 +81,7 @@ class ScoringService:
     def __init__(self, session: Session) -> None:
         self.session = session
         self.repository = ScoreRepository(session)
+        self._district_name_cache: dict[str, str | None] = {}
 
     @staticmethod
     def amenity_label(category: str) -> str:
@@ -164,6 +166,15 @@ class ScoringService:
     @staticmethod
     def localized_quality_flag(flag: str) -> str:
         return QUALITY_FLAG_LABELS.get(flag, flag)
+
+    def _district_name_for_region(self, ars: str, level: str, district_name: str | None) -> str | None:
+        if level != "gemeinde":
+            return district_name
+        if district_name:
+            return district_name
+        if ars not in self._district_name_cache:
+            self._district_name_cache[ars] = self.repository.resolve_district_name(ars)
+        return self._district_name_cache[ars]
 
     def _indicator_text(self, key: str, raw_value: float, normalized_value: float, unit: str) -> str:
         label = self.localized_indicator_name(key)
@@ -326,6 +337,9 @@ class ScoringService:
                     ars=region.ars,
                     slug=slugify_region_name(region.name),
                     name=region.name,
+                    level=region.level,
+                    state_name=region.state_name,
+                    district_name=self._district_name_for_region(region.ars, region.level, region.district_name),
                     centroid_lat=region.centroid_lat,
                     centroid_lon=region.centroid_lon,
                     score_total=total,
@@ -375,9 +389,39 @@ class ScoringService:
         limit: int = 100,
     ) -> RecommendationResponse:
         preferences = self.preferences_for_category(category, state_code)
-        return self.get_recommendations(
-            preferences,
+        rows = self.repository.list_top_snapshots_by_category(
+            category=category,
+            state_code=state_code,
             limit=limit,
-            include_details=False,
-            persist_session=False,
         )
+        items: list[RecommendationItem] = []
+        for region, snapshot in rows:
+            category_scores = {
+                "climate": snapshot.score_climate,
+                "air": snapshot.score_air,
+                "safety": snapshot.score_safety,
+                "demographics": snapshot.score_demographics,
+                "amenities": snapshot.score_amenities,
+                "oepnv": snapshot.score_oepnv,
+            }
+            items.append(
+                RecommendationItem(
+                    ars=region.ars,
+                    slug=slugify_region_name(region.name),
+                    name=region.name,
+                    level=region.level,
+                    state_name=region.state_name,
+                    district_name=self._district_name_for_region(region.ars, region.level, region.district_name),
+                    centroid_lat=region.centroid_lat,
+                    centroid_lon=region.centroid_lon,
+                    score_total=snapshot.score_total,
+                    score_climate=snapshot.score_climate,
+                    score_air=snapshot.score_air,
+                    score_safety=snapshot.score_safety,
+                    score_demographics=snapshot.score_demographics,
+                    score_amenities=snapshot.score_amenities,
+                    score_oepnv=snapshot.score_oepnv,
+                    reason=build_reason(category_scores, preferences),
+                )
+            )
+        return RecommendationResponse(items=items)
