@@ -1,7 +1,7 @@
 <template>
   <div class="flex min-h-screen flex-col bg-gradient-to-b from-slate-50 to-blue-50 text-slate-900">
 
-    <header class="sticky top-0 z-40 border-b border-white/60 bg-white/75 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+    <header class="sticky top-0 z-[1000] border-b border-white/60 bg-white/75 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
       <nav class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div class="flex items-center justify-between gap-4">
           <NuxtLink to="/" class="group inline-flex items-center gap-3">
@@ -91,7 +91,7 @@
       </nav>
     </header>
 
-    <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+    <main class="relative z-0 mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
       <NuxtPage />
     </main>
 
