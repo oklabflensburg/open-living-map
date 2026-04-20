@@ -36,7 +36,7 @@
             <input
               v-model="searchQuery"
               type="search"
-              placeholder="Ort suchen, z. B. Flensburg oder Oppenau"
+              placeholder="PLZ, Gemeinde oder AGS suchen, z. B. 24937, Flensburg oder 01001000"
               class="w-full rounded-2xl border border-slate-200/90 bg-white/95 px-4 py-3 pl-12 pr-12 text-sm text-slate-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)] outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
               autocomplete="off"
               spellcheck="false"
@@ -67,7 +67,7 @@
               <div v-if="searchLoading" class="px-4 py-3 text-sm text-slate-500">Lade Orte...</div>
               <div v-else-if="searchError" class="px-4 py-3 text-sm text-rose-600">{{ searchError }}</div>
               <div v-else-if="searchQuery.trim().length < 2" class="px-4 py-3 text-sm text-slate-500">
-                Mindestens 2 Zeichen eingeben.
+                Mindestens 2 Zeichen für PLZ, Gemeinde oder AGS eingeben.
               </div>
               <div v-else-if="!searchResults.length" class="px-4 py-3 text-sm text-slate-500">
                 Kein passender Ort gefunden.
@@ -341,7 +341,7 @@ useHead({
     {
       key: 'ld-site',
       type: 'application/ld+json',
-      children: JSON.stringify({
+      innerHTML: JSON.stringify({
         '@context': 'https://schema.org',
         '@graph': [
           {

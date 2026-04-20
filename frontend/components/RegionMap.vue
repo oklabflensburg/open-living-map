@@ -17,6 +17,7 @@
 
 <script setup lang="ts">
 import type { GeoJsonFeatureCollection, RecommendationItem } from '~/types/api'
+import type { Layer, LatLng } from 'leaflet'
 
 const props = defineProps<{
   items: RecommendationItem[]
@@ -85,7 +86,7 @@ function renderStateBoundaries() {
       fillColor: '#93c5fd',
       fillOpacity: 0.08
     },
-    onEachFeature(feature, itemLayer) {
+    onEachFeature(feature: GeoJSON.Feature, itemLayer: Layer) {
       const properties = (feature.properties || {}) as Record<string, unknown>
       const stateName = typeof properties.state_name === 'string' ? properties.state_name : 'Bundesland'
       itemLayer.bindPopup(stateName)
@@ -101,7 +102,7 @@ function renderMarkers() {
 
   const points = props.items.filter((item) => item.centroid_lat != null && item.centroid_lon != null)
   points.forEach((item) => {
-    const marker = LLeaflet.marker([item.centroid_lat as number, item.centroid_lon as number], { icon: markerIcon })
+    const marker = LLeaflet!.marker([item.centroid_lat as number, item.centroid_lon as number], { icon: markerIcon! })
     marker.bindPopup(`${item.name} (Passung zum Suchprofil ${item.score_profile.toFixed(1)})`)
     marker.on('click', () => router.push(`/region/${item.slug || item.ars}`))
     marker.addTo(layer as import('leaflet').LayerGroup)

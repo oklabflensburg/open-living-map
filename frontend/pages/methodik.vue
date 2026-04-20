@@ -228,7 +228,7 @@ useHead(() => ({
     {
       key: 'ld-methodik',
       type: 'application/ld+json',
-      children: JSON.stringify({
+      innerHTML: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'TechArticle',
         headline: `${title} | ${siteName}`,

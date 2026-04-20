@@ -197,7 +197,7 @@ function indicatorCategoryTheme(category: string) {
 }
 
 function coverageText(item: RecommendationItem) {
-  const entries = [
+  const entries: Array<[string, number]> = [
     ['Klima', item.coverage_climate],
     ['Luftqualität', item.coverage_air],
     ['Verkehrssicherheit', item.coverage_safety],

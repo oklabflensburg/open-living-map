@@ -1,3 +1,5 @@
+import process from 'node:process'
+
 export default defineNuxtConfig({
   compatibilityDate: '2026-04-13',
   devtools: { enabled: process.env.NODE_ENV !== 'production' },

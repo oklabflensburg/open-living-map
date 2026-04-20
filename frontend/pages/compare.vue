@@ -23,7 +23,7 @@
           <input
             v-model="searchQuery"
             type="search"
-            placeholder="Ort hinzufügen, z. B. Berlin oder Flensburg"
+            placeholder="PLZ, Gemeinde oder AGS hinzufügen, z. B. 24937, Berlin oder 01001000"
             class="min-w-[14rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm text-slate-900 outline-none placeholder:text-slate-400"
             autocomplete="off"
             spellcheck="false"
@@ -47,7 +47,7 @@
             Maximal drei Regionen können gleichzeitig verglichen werden.
           </div>
           <div v-else-if="searchQuery.trim().length < 2" class="px-4 py-3 text-sm text-slate-500">
-            Mindestens 2 Zeichen eingeben.
+            Mindestens 2 Zeichen für PLZ, Gemeinde oder AGS eingeben.
           </div>
           <div v-else-if="!searchResults.length" class="px-4 py-3 text-sm text-slate-500">
             Kein passender Ort gefunden.
@@ -133,7 +133,7 @@ useHead(() => ({
     {
       key: 'ld-compare',
       type: 'application/ld+json',
-      children: JSON.stringify({
+      innerHTML: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'CollectionPage',
         name: `${title} | ${siteName}`,

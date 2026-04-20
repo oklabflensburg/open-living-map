@@ -16,6 +16,9 @@
 </template>
 
 <script setup lang="ts">
+import type { GeoJsonFeatureCollection } from '~/types/api'
+import type { Layer, LatLng } from 'leaflet'
+
 type AirStationMapInfo = {
   indicator_key: string
   label: string
@@ -33,7 +36,7 @@ const props = defineProps<{
   name: string
   centroidLat: number | null
   centroidLon: number | null
-  overlayPois?: Record<string, unknown> | null
+  overlayPois?: GeoJsonFeatureCollection | null
   selectedOverlayLabel?: string | null
   airStations?: AirStationMapInfo[]
   selectedAirStationId?: string | null
@@ -209,7 +212,7 @@ function renderPois() {
   }
 
   poiLayer = LLeaflet.geoJSON(props.overlayPois as never, {
-    pointToLayer(_feature, latlng) {
+    pointToLayer(_feature: GeoJSON.Feature, latlng: LatLng) {
       return LLeaflet!.circleMarker(latlng, {
         radius: 6,
         color: '#b45309',
@@ -218,7 +221,7 @@ function renderPois() {
         fillOpacity: 0.9
       })
     },
-    onEachFeature(feature, layer) {
+    onEachFeature(feature: GeoJSON.Feature, layer: Layer) {
       const properties = (feature.properties || {}) as Record<string, unknown>
       const label = props.selectedOverlayLabel || 'POI'
       const name = typeof properties.name === 'string' && properties.name ? properties.name : null

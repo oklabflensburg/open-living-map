@@ -384,7 +384,7 @@ useHead(() => {
       {
         key: 'ld-region',
         type: 'application/ld+json',
-        children: JSON.stringify(graph.length === 1 ? { '@context': 'https://schema.org', ...graph[0] } : { '@context': 'https://schema.org', '@graph': graph })
+        innerHTML: JSON.stringify(graph.length === 1 ? { '@context': 'https://schema.org', ...graph[0] } : { '@context': 'https://schema.org', '@graph': graph })
       }
     ]
   }

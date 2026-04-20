@@ -38,7 +38,7 @@ import RegionMap from '~/components/RegionMap.vue'
 import StateSelect from '~/components/StateSelect.vue'
 import { getGermanStateName } from '~/composables/useGermanStates'
 import { usePreferencesStore } from '~/stores/preferences'
-import type { RecommendationResponse } from '~/types/api'
+import type { GeoJsonFeatureCollection, RecommendationResponse } from '~/types/api'
 
 const { siteName, absoluteUrl } = useSiteSeo()
 const store = usePreferencesStore()
@@ -48,7 +48,7 @@ const { fetchStateBoundaries } = useRegions()
 const pending = ref(true)
 const error = ref('')
 const response = ref<RecommendationResponse | null>(null)
-const stateBoundaries = ref<Record<string, unknown> | null>(null)
+const stateBoundaries = ref<GeoJsonFeatureCollection | null>(null)
 
 const title = 'Ranking'
 const description = 'Ergebnisse und Kartenansicht der berechneten Wohnort-Empfehlungen.'
@@ -99,7 +99,7 @@ useHead(() => {
       {
         key: 'ld-results',
         type: 'application/ld+json',
-        children: JSON.stringify({
+        innerHTML: JSON.stringify({
           '@context': 'https://schema.org',
           '@type': 'CollectionPage',
           name: `${title} | ${siteName}`,
