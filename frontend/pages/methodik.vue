@@ -248,6 +248,7 @@ const sources = [
   'https://www.env-it.de/stationen/public/station.do',
   'https://www.opengeodata.nrw.de/produkte/transport_verkehr/unfallatlas/',
   'https://www.destatis.de/DE/Service/Statistik-Visualisiert/unfall-atlas.html',
+  'https://service.destatis.de/DE/karten/flaechenatlas2019daten.xlsx',
   'https://download.geofabrik.de/europe/germany.html',
   'https://www.openstreetmap.org/copyright?locale=de',
   'https://www.opendata-oepnv.de/ht/de/datensaetze',

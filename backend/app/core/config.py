@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     )
     dwd_max_stations: int = 0
     geofabrik_germany_pbf_url: str = "https://download.geofabrik.de/europe/germany-latest.osm.pbf"
+    bkg_district_table: str = "public.vg25_krs"
     bkg_municipality_table: str = "public.vg25_gem"
     bkg_geometry_column: str = "geom"
     bkg_geometry_flavour: int = 4

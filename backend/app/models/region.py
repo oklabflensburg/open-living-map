@@ -8,6 +8,7 @@ class Region(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     ars: str = Field(index=True, unique=True, max_length=12)
+    bem: str | None = Field(default=None, max_length=255)
     slug: str | None = Field(default=None, index=True)
     name: str
     level: str = Field(default="kreis")

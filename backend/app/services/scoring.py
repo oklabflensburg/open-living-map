@@ -1,7 +1,6 @@
 from sqlmodel import Session
 
 from app.models.preference import UserPreferenceSession
-from app.core.ars import slugify_region_name
 from app.repositories.score_repository import ScoreRepository
 from app.schemas.recommendation import (
     RecommendationIndicatorDetail,
@@ -347,7 +346,7 @@ class ScoringService:
             items.append(
                 RecommendationItem(
                     ars=region.ars,
-                    slug=slugify_region_name(region.name),
+                    slug=region.slug or region.ars,
                     name=region.name,
                     level=region.level,
                     state_name=region.state_name,
@@ -422,7 +421,7 @@ class ScoringService:
             items.append(
                 RecommendationItem(
                     ars=region.ars,
-                    slug=slugify_region_name(region.name),
+                    slug=region.slug or region.ars,
                     name=region.name,
                     level=region.level,
                     state_name=region.state_name,

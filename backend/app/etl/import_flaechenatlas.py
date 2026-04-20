@@ -197,7 +197,7 @@ def main() -> None:
             ),
         ]
 
-        source_url = "https://www.destatis.de/DE/Service/Statistik-Visualisiert/flaechenatlas.html"
+        source_url = "https://service.destatis.de/DE/karten/flaechenatlas2019daten.xlsx"
         methodology = (
             "Flächenatlas 2019 auf Gemeindeebene: Waldanteil, Landwirtschaftsanteil, "
             "Siedlungs- und Verkehrsflächenanteil, Verkehrsflächenanteil sowie "
