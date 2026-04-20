@@ -18,7 +18,7 @@
     </div>
 
     <div class="mb-6">
-      <RegionMap :items="response?.items || []" :state-boundaries="stateBoundaries" />
+      <RegionMap :items="response?.items || []" :state-boundaries="stateBoundaries" :loading="pending" />
     </div>
 
     <div v-if="pending" class="text-slate-500">Lade Empfehlungen...</div>

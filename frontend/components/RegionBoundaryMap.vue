@@ -1,6 +1,17 @@
 <template>
   <ClientOnly>
-    <div ref="container" class="h-96 w-full rounded-xl border border-slate-200" />
+    <div class="relative">
+      <div ref="container" class="h-96 w-full rounded-xl border border-slate-200" />
+      <div
+        v-if="tilesLoading"
+        class="absolute inset-0 z-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white/85 backdrop-blur-sm"
+      >
+        <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm">
+          <span class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+          Karte wird geladen
+        </div>
+      </div>
+    </div>
   </ClientOnly>
 </template>
 
@@ -29,6 +40,7 @@ const props = defineProps<{
 }>()
 
 const container = ref<HTMLElement | null>(null)
+const tilesLoading = ref(true)
 let LLeaflet: typeof import('leaflet') | null = null
 let map: import('leaflet').Map | null = null
 let boundaryLayer: import('leaflet').GeoJSON | null = null
@@ -43,9 +55,16 @@ onMounted(async () => {
   }
 
   map = LLeaflet.map(container.value).setView([props.centroidLat || 51.2, props.centroidLon || 10.4], 11)
-  LLeaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const tileLayer = LLeaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map)
+  })
+  tileLayer.on('loading', () => {
+    tilesLoading.value = true
+  })
+  tileLayer.on('load', () => {
+    tilesLoading.value = false
+  })
+  tileLayer.addTo(map)
 
   renderBoundary()
   renderAirStations()

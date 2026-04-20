@@ -49,6 +49,7 @@ def ensure_region_schema_compatibility() -> None:
             text(
                 """
                 ALTER TABLE region
+                ADD COLUMN IF NOT EXISTS bem text,
                 ADD COLUMN IF NOT EXISTS slug text,
                 ADD COLUMN IF NOT EXISTS district_name text,
                 ADD COLUMN IF NOT EXISTS wikidata_id text,
