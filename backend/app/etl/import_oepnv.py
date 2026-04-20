@@ -812,7 +812,9 @@ def _fetch_metric_values(sql: str, params: dict[str, object] | None = None) -> l
     return values
 
 
-def _compute_metrics(active_stage_keys: list[str]) -> tuple[list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]]]:
+def _compute_metrics(
+    active_stage_keys: list[str],
+) -> tuple[list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]]]:
     params = {"active_stage_keys": active_stage_keys}
     stop_density_values = _fetch_metric_values(
         """
@@ -843,6 +845,19 @@ def _compute_metrics(active_stage_keys: list[str]) -> tuple[list[tuple[int, floa
         JOIN region r ON r.id = d.region_id
         WHERE d.feed_key IN :active_stage_keys
         GROUP BY d.region_id, r.population
+        HAVING SUM(d.departures) > 0;
+        """,
+        params,
+    )
+
+    departures_total_values = _fetch_metric_values(
+        """
+        SELECT
+            d.region_id,
+            SUM(d.departures) AS departures_total
+        FROM oepnv.gtfs_stop_departures d
+        WHERE d.feed_key IN :active_stage_keys
+        GROUP BY d.region_id
         HAVING SUM(d.departures) > 0;
         """,
         params,
@@ -898,7 +913,7 @@ def _compute_metrics(active_stage_keys: list[str]) -> tuple[list[tuple[int, floa
         params,
     )
 
-    return stop_density_values, departures_values, regularity_values
+    return stop_density_values, departures_values, departures_total_values, regularity_values
 
 
 def _write_indicator(
@@ -1003,7 +1018,7 @@ def main() -> None:
             logger.warning("Kein GTFS-Feed erfolgreich verarbeitet. Kein Write.")
             return
 
-        stop_density_values, departures_values, regularity_values = _compute_metrics(active_stage_keys)
+        stop_density_values, departures_values, departures_total_values, regularity_values = _compute_metrics(active_stage_keys)
 
         _write_indicator(
             key="oepnv_stop_density",
@@ -1035,24 +1050,41 @@ def main() -> None:
         )
 
         _write_indicator(
+            key="oepnv_departures_total",
+            name="OEPNV-Angebotsmasse",
+            category="oepnv",
+            unit="count",
+            direction="higher_is_better",
+            normalization_mode="log",
+            methodology=(
+                "Absolute GTFS-Abfahrtsmasse je Gemeinde aus stop_times/trips/calendar in SQL aggregiert. "
+                "Die Metrik wird logarithmisch normiert, damit große Netze sichtbar besser abschneiden koennen, "
+                "ohne sehr große Staedte unverhaeltnismaessig zu bevorzugen."
+            ),
+            values=departures_total_values,
+        )
+
+        _write_indicator(
             key="oepnv_departure_regularity",
             name="OEPNV-Abfahrtsregelmaessigkeit",
             category="oepnv",
             unit="index_0_100",
             direction="higher_is_better",
-            normalization_mode="linear",
+            normalization_mode="log",
             methodology=(
                 "Regelmaessigkeitsindex aus 15-Minuten-Bins pro Haltestelle auf Basis von GTFS stop_times in SQL. "
-                "Aggregation je Gemeinde gewichtet mit Abfahrtsvolumen."
+                "Aggregation je Gemeinde gewichtet mit Abfahrtsvolumen. Die Normierung erfolgt logarithmisch, "
+                "damit Unterschiede grosser Netze nicht unverhaeltnismaessig hart auf den Gesamtscore durchschlagen."
             ),
             values=regularity_values,
         )
 
         logger.info(
-            "OEPNV-Import abgeschlossen (Feeds=%s, Stops=%s Regionen, Abfahrten=%s Regionen, Regelmaessigkeit=%s Regionen)",
+            "OEPNV-Import abgeschlossen (Feeds=%s, Stops=%s Regionen, Abfahrtsdichte=%s Regionen, Angebotsmasse=%s Regionen, Regelmaessigkeit=%s Regionen)",
             loaded_feeds,
             len(stop_density_values),
             len(departures_values),
+            len(departures_total_values),
             len(regularity_values),
         )
     finally:

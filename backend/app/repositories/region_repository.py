@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from sqlalchemy import case, func
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -79,8 +80,39 @@ class RegionRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def list_regions(self) -> list[Region]:
-        statement = select(Region).order_by(Region.name)
+    def list_regions(
+        self, 
+        search_query: str | None = None, 
+        state_code: str | None = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> list[Region]:
+        statement = select(Region)
+        
+        if search_query:
+            query = search_query.strip().lower()
+            contains_pattern = f"%{query}%"
+            prefix_pattern = f"{query}%"
+
+            statement = statement.where(
+                func.lower(Region.name).like(contains_pattern)
+                | func.lower(Region.state_name).like(contains_pattern)
+                | Region.ars.startswith(search_query.strip())
+            )
+
+            statement = statement.order_by(
+                case((func.lower(Region.name) == query, 0), else_=1),
+                case((func.lower(Region.name).like(prefix_pattern), 0), else_=1),
+                case((func.lower(Region.state_name).like(prefix_pattern), 0), else_=1),
+                Region.name,
+            )
+        else:
+            statement = statement.order_by(Region.name)
+        
+        if state_code:
+            statement = statement.where(Region.state_code == state_code)
+
+        statement = statement.offset(offset).limit(limit)
         return list(self.session.exec(statement))
 
     def get_by_ars(self, ars: str) -> Region | None:
@@ -136,7 +168,13 @@ class RegionRepository:
             return {"type": "FeatureCollection", "features": []}
 
         state_filter = "WHERE state_code = :state_code" if state_code else ""
-        params: dict[str, Any] = {"state_code": state_code} if state_code else {}
+        simplify_tolerance = 250.0 if state_code else 1000.0
+        params: dict[str, Any] = {
+            "simplify_tolerance": simplify_tolerance,
+            "geojson_precision": 5,
+        }
+        if state_code:
+            params["state_code"] = state_code
         row = self.session.execute(
             text(
                 f"""
@@ -146,7 +184,16 @@ class RegionRepository:
                         json_agg(
                             json_build_object(
                                 'type', 'Feature',
-                                'geometry', ST_AsGeoJSON(geom)::json,
+                                'geometry', ST_AsGeoJSON(
+                                    ST_Transform(
+                                        ST_SimplifyPreserveTopology(
+                                            ST_Transform(geom, 3857),
+                                            :simplify_tolerance
+                                        ),
+                                        4326
+                                    ),
+                                    :geojson_precision
+                                )::json,
                                 'properties', json_build_object(
                                     'state_code', state_code,
                                     'state_name', state_name
@@ -203,60 +250,29 @@ class RegionRepository:
         return [(str(row[0]), int(row[1]), float(row[2])) for row in rows]
 
     def get_amenity_pois_geojson(self, ars: str, category: str) -> dict[str, Any] | None:
-        mappings = AMENITY_CATEGORY_MAPPING.get(category)
-        if mappings is None:
+        if category not in AMENITY_CATEGORY_MAPPING:
             return None
 
         boundary_exists = self.session.execute(
             text("SELECT to_regclass('geo.municipality_boundary') IS NOT NULL")
         ).scalar()
-        point_exists = self.session.execute(
-            text("SELECT to_regclass('osm.planet_osm_point') IS NOT NULL")).scalar()
-        polygon_exists = self.session.execute(
-            text("SELECT to_regclass('osm.planet_osm_polygon') IS NOT NULL")).scalar()
-        if not boundary_exists or not point_exists or not polygon_exists:
+        stage_exists = self.session.execute(
+            text("SELECT to_regclass('osm.amenity_poi_stage') IS NOT NULL")
+        ).scalar()
+        if not boundary_exists or not stage_exists:
             return {
                 "type": "FeatureCollection",
                 "features": [],
             }
 
-        point_condition, point_params = _build_tag_match_condition(
-            "point", mappings)
-        polygon_condition, polygon_params = _build_tag_match_condition(
-            "polygon", mappings)
         rows = self.session.execute(
             text(
-                f"""
+                """
                 WITH boundary AS (
                     SELECT ST_Transform(geom, 3857) AS geom
                     FROM geo.municipality_boundary
                     WHERE ags = :ars
                     LIMIT 1
-                ),
-                pois AS (
-                    SELECT
-                        'point' AS source_type,
-                        point.osm_id,
-                        COALESCE(point.name, point.tags -> 'name') AS name,
-                        ST_AsGeoJSON(ST_Transform(point.way, 4326))::json AS geometry
-                    FROM osm.planet_osm_point point
-                    CROSS JOIN boundary b
-                    WHERE point.way && b.geom
-                      AND ST_Covers(b.geom, point.way)
-                      AND {point_condition}
-
-                    UNION ALL
-
-                    SELECT
-                        'polygon' AS source_type,
-                        polygon.osm_id,
-                        COALESCE(polygon.name, polygon.tags -> 'name') AS name,
-                        ST_AsGeoJSON(ST_Transform(ST_PointOnSurface(polygon.way), 4326))::json AS geometry
-                    FROM osm.planet_osm_polygon polygon
-                    CROSS JOIN boundary b
-                    WHERE polygon.way && b.geom
-                      AND ST_Covers(b.geom, ST_PointOnSurface(polygon.way))
-                      AND {polygon_condition}
                 )
                 SELECT json_build_object(
                     'type', 'FeatureCollection',
@@ -264,22 +280,25 @@ class RegionRepository:
                         json_agg(
                             json_build_object(
                                 'type', 'Feature',
-                                'geometry', geometry,
+                                'geometry', ST_AsGeoJSON(ST_Transform(p.geom, 4326))::json,
                                 'properties', json_build_object(
-                                    'osm_id', osm_id,
-                                    'name', name,
+                                    'name', p.name,
                                     'category', CAST(:category AS text),
-                                    'source_type', source_type
+                                    'source_type', 'stage'
                                 )
                             )
                         ),
                         '[]'::json
                     )
                 )
-                FROM pois
+                FROM osm.amenity_poi_stage p
+                CROSS JOIN boundary b
+                WHERE p.category = :category
+                  AND p.geom && b.geom
+                  AND ST_Covers(b.geom, p.geom)
                 """
             ),
-            {"ars": ars, "category": category, **point_params, **polygon_params},
+            {"ars": ars, "category": category},
         ).scalar()
         if rows is None:
             return {

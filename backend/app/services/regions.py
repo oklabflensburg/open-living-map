@@ -22,8 +22,8 @@ class RegionService:
             return None
 
         snapshot = self.repository.get_score_snapshot(region.id)
-        scores = {
-            "total": snapshot.score_total if snapshot else 0.0,
+        base_scoring = ScoringService(self.repository.session)
+        category_scores = {
             "climate": snapshot.score_climate if snapshot else 0.0,
             "air": snapshot.score_air if snapshot else 0.0,
             "safety": snapshot.score_safety if snapshot else 0.0,
@@ -31,6 +31,28 @@ class RegionService:
             "amenities": snapshot.score_amenities if snapshot else 0.0,
             "landuse": snapshot.score_landuse if snapshot else 0.0,
             "oepnv": snapshot.score_oepnv if snapshot else 0.0,
+        }
+        coverage = {
+            "climate": snapshot.coverage_climate if snapshot else 0.0,
+            "air": snapshot.coverage_air if snapshot else 0.0,
+            "safety": snapshot.coverage_safety if snapshot else 0.0,
+            "demographics": snapshot.coverage_demographics if snapshot else 0.0,
+            "amenities": snapshot.coverage_amenities if snapshot else 0.0,
+            "landuse": snapshot.coverage_landuse if snapshot else 0.0,
+            "oepnv": snapshot.coverage_oepnv if snapshot else 0.0,
+        }
+        base_preferences = RecommendationInput(
+            climate_weight=1,
+            air_weight=1,
+            safety_weight=1,
+            demographics_weight=1,
+            amenities_weight=1,
+            landuse_weight=1,
+            oepnv_weight=1,
+        )
+        scores = {
+            "total": snapshot.score_total if snapshot else 0.0,
+            **category_scores,
         }
 
         highlights = [
@@ -41,7 +63,6 @@ class RegionService:
             f"ÖPNV: {scores['oepnv']:.1f}",
         ]
         source_links = self.repository.list_source_links()
-        base_scoring = ScoringService(self.repository.session)
         amenity_stats = [
             AmenityStat(
                 category=category,
@@ -90,29 +111,13 @@ class RegionService:
             else None
         )
         geometry = self.repository.get_boundary_geojson(region.ars)
-        base_preferences = RecommendationInput(
-            climate_weight=1,
-            air_weight=1,
-            safety_weight=1,
-            demographics_weight=1,
-            amenities_weight=1,
-            landuse_weight=1,
-            oepnv_weight=1,
-        )
         score_formula, calculation_details, indicators = base_scoring.build_region_explanation(
             ars=region.ars,
             region_id=region.id,
             region_level=region.level,
             region_population=region.population,
-            category_scores={
-                "climate": scores["climate"],
-                "air": scores["air"],
-                "safety": scores["safety"],
-                "demographics": scores["demographics"],
-                "amenities": scores["amenities"],
-                "landuse": scores["landuse"],
-                "oepnv": scores["oepnv"],
-            },
+            category_scores=category_scores,
+            coverage=coverage,
             preferences=base_preferences,
         )
 

@@ -2,12 +2,21 @@
   <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
     <div class="mb-2 flex items-start justify-between gap-4">
       <div>
-        <h3 class="text-lg font-semibold">{{ item.name }}</h3>
+        <h3 class="text-lg font-semibold">
+          <NuxtLink :to="`/region/${item.slug}`" class="transition hover:text-blue-700">
+            {{ item.name }}
+          </NuxtLink>
+        </h3>
         <p class="text-xs text-slate-500">AGS: {{ item.ars }}</p>
+        <p class="mt-1 text-xs text-slate-500">
+          Neutraler Gesamtscore: {{ item.score_total.toFixed(1) }}
+        </p>
       </div>
-      <span class="rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-800">
-        {{ item.score_total.toFixed(1) }}
-      </span>
+      <div class="text-right">
+        <span class="mt-1 inline-block rounded-lg bg-slate-100 px-2.5 py-1 text-sm font-semibold text-slate-800">
+          {{ item.score_profile.toFixed(1) }}
+        </span>
+      </div>
     </div>
 
     <div class="space-y-2">
@@ -62,24 +71,31 @@
       />
     </div>
 
-    <p class="mt-3 text-sm text-slate-600">{{ item.reason }}</p>
+    <p v-if="showProfileContext" class="mt-3 text-sm text-slate-600">{{ item.reason }}</p>
 
     <details class="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
       <summary class="cursor-pointer font-semibold text-slate-900">
-        Berechnung und Datenbasis anzeigen
+        {{ showProfileContext ? 'Berechnung und Datenbasis anzeigen' : 'Vergleichsdaten anzeigen' }}
       </summary>
 
       <div class="mt-3 space-y-3">
-        <div>
+        <div v-if="showProfileContext">
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Score-Formel</p>
           <p class="mt-1">{{ item.score_formula }}</p>
         </div>
 
-        <div>
+        <div v-if="showProfileContext">
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Warum dieses Ergebnis?</p>
           <ul class="mt-1 list-disc space-y-1 pl-5">
             <li v-for="detail in item.calculation_details" :key="detail">{{ detail }}</li>
           </ul>
+        </div>
+
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Datenabdeckung</p>
+          <p class="mt-1 text-xs text-slate-600">
+            {{ coverageText(item) }}
+          </p>
         </div>
 
         <div>
@@ -121,7 +137,12 @@ import type { RecommendationItem } from '~/types/api'
 
 import ScoreBar from './ScoreBar.vue'
 
-defineProps<{ item: RecommendationItem }>()
+withDefaults(defineProps<{
+  item: RecommendationItem
+  showProfileContext?: boolean
+}>(), {
+  showProfileContext: true
+})
 
 const categoryLabels: Record<string, string> = {
   climate: 'Klima',
@@ -173,5 +194,28 @@ function indicatorCategoryTheme(category: string) {
     cardClass: 'border-slate-200 bg-white',
     badgeClass: 'bg-slate-100 text-slate-700'
   }
+}
+
+function coverageText(item: RecommendationItem) {
+  const entries = [
+    ['Klima', item.coverage_climate],
+    ['Luftqualität', item.coverage_air],
+    ['Verkehrssicherheit', item.coverage_safety],
+    ['Demografie/Familie', item.coverage_demographics],
+    ['Alltagsnähe', item.coverage_amenities],
+    ['Flächennutzung', item.coverage_landuse],
+    ['ÖPNV', item.coverage_oepnv]
+  ]
+  const coverageValues = entries.map(([, coverage]) => coverage)
+  const hasCoverageMetadata = coverageValues.some((coverage) => coverage > 0)
+
+  if (!hasCoverageMetadata) {
+    return 'Für diesen Datenstand liegen noch keine separat berechneten Abdeckungswerte vor.'
+  }
+
+  return entries
+    .filter(([, coverage]) => coverage < 1)
+    .map(([label, coverage]) => `${label} ${Math.round(coverage * 100)} %`)
+    .join(' · ') || 'Alle Kategorien sind vollständig mit Daten abgedeckt.'
 }
 </script>

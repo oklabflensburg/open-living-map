@@ -17,7 +17,7 @@ def recommendations(
     session: Session = Depends(get_session),
 ) -> RecommendationResponse:
     service = ScoringService(session)
-    return service.get_recommendations(payload)
+    return service.get_recommendations(payload, persist_session=False)
 
 
 @router.get(

@@ -33,6 +33,7 @@ class RecommendationItem(BaseModel):
     centroid_lat: float | None = None
     centroid_lon: float | None = None
     score_total: float
+    score_profile: float
     score_climate: float
     score_air: float
     score_safety: float
@@ -40,6 +41,14 @@ class RecommendationItem(BaseModel):
     score_amenities: float
     score_landuse: float
     score_oepnv: float
+    # Coverage fields (0.0 to 1.0)
+    coverage_climate: float = 0.0
+    coverage_air: float = 0.0
+    coverage_safety: float = 0.0
+    coverage_demographics: float = 0.0
+    coverage_amenities: float = 0.0
+    coverage_landuse: float = 0.0
+    coverage_oepnv: float = 0.0
     reason: str
     score_formula: str = ""
     calculation_details: list[str] = Field(default_factory=list)

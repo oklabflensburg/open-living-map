@@ -123,9 +123,18 @@ def ensure_osm_tables() -> None:
                 CREATE TABLE IF NOT EXISTS osm.amenity_poi_stage (
                     category varchar NOT NULL,
                     poi_id varchar NOT NULL,
+                    name varchar NULL,
                     geom geometry(Point, 3857) NOT NULL,
                     PRIMARY KEY (category, poi_id)
                 );
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                ALTER TABLE osm.amenity_poi_stage
+                ADD COLUMN IF NOT EXISTS name varchar NULL
                 """
             )
         )
@@ -225,6 +234,7 @@ def _build_stage_scan_queries(table_name: str, alias: str, geom_sql: str) -> tup
             SELECT DISTINCT
                 matched.category AS category,
                 '{table_name}:' || {alias}.osm_id::text AS poi_id,
+                COALESCE(NULLIF({alias}."name", ''), {alias}.tags -> 'name') AS name,
                 {geom_sql} AS geom
             FROM osm.{table_name} {alias}
             CROSS JOIN LATERAL (
@@ -275,13 +285,20 @@ def rebuild_osm_stage_tables() -> None:
         connection.execute(
             text(
                 f"""
-                INSERT INTO osm.amenity_poi_stage (category, poi_id, geom)
-                SELECT category, poi_id, geom
+                INSERT INTO osm.amenity_poi_stage (category, poi_id, name, geom)
+                SELECT DISTINCT ON (category, poi_id)
+                    category,
+                    poi_id,
+                    name,
+                    geom
                 FROM (
                     {' UNION ALL '.join(point_scan_queries)}
                 ) staged
                 WHERE geom IS NOT NULL
-                ON CONFLICT (category, poi_id) DO NOTHING
+                ORDER BY category, poi_id, (name IS NULL), name DESC
+                ON CONFLICT (category, poi_id) DO UPDATE
+                SET name = EXCLUDED.name,
+                    geom = EXCLUDED.geom
                 """
             ),
             point_params,
@@ -289,13 +306,20 @@ def rebuild_osm_stage_tables() -> None:
         connection.execute(
             text(
                 f"""
-                INSERT INTO osm.amenity_poi_stage (category, poi_id, geom)
-                SELECT category, poi_id, geom
+                INSERT INTO osm.amenity_poi_stage (category, poi_id, name, geom)
+                SELECT DISTINCT ON (category, poi_id)
+                    category,
+                    poi_id,
+                    name,
+                    geom
                 FROM (
                     {' UNION ALL '.join(polygon_scan_queries)}
                 ) staged
                 WHERE geom IS NOT NULL
-                ON CONFLICT (category, poi_id) DO NOTHING
+                ORDER BY category, poi_id, (name IS NULL), name DESC
+                ON CONFLICT (category, poi_id) DO UPDATE
+                SET name = EXCLUDED.name,
+                    geom = EXCLUDED.geom
                 """
             ),
             polygon_params,

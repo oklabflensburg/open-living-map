@@ -13,6 +13,22 @@
               <span class="block text-xs font-medium text-slate-500">Offene Daten für Regionen in Deutschland</span>
             </span>
           </NuxtLink>
+
+          <button
+            type="button"
+            class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition hover:bg-slate-50 lg:hidden"
+            :aria-expanded="mobileMenuOpen ? 'true' : 'false'"
+            aria-controls="mobile-nav"
+            aria-label="Navigation öffnen"
+            @click="mobileMenuOpen = !mobileMenuOpen"
+          >
+            <svg v-if="!mobileMenuOpen" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 5a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm0 5a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H4a1 1 0 0 1-1-1Zm1 4a1 1 0 1 0 0 2h12a1 1 0 1 0 0-2H4Z" clip-rule="evenodd" />
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 1 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414Z" clip-rule="evenodd" />
+            </svg>
+          </button>
         </div>
 
         <div class="flex w-full flex-col gap-4 lg:w-auto lg:flex-row lg:items-center">
@@ -76,16 +92,23 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/80 p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+          <div
+            id="mobile-nav"
+            class="rounded-2xl border border-slate-200/80 bg-white/80 p-1.5 shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
+            :class="mobileMenuOpen ? 'block' : 'hidden lg:block'"
+          >
+            <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:overflow-x-auto">
             <NuxtLink
               v-for="item in navItems"
               :key="item.to"
               :to="item.to"
               class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition"
               :class="navLinkClass(item.to)"
+              @click="mobileMenuOpen = false"
             >
               {{ item.label }}
             </NuxtLink>
+            </div>
           </div>
         </div>
       </nav>
@@ -148,7 +171,7 @@ const { siteName, organizationName, siteDescription, siteLocale, absoluteUrl } =
 const { legal } = useLegalConfig()
 const router = useRouter()
 const route = useRoute()
-const { fetchRegions } = useRegions()
+const { searchRegionsAutocomplete } = useRegions()
 const repoUrl = computed(() => legal.value.repoUrl || 'https://github.com/oklabflensburg/wohnortkompass')
 const navItems = [
   { to: '/finder', label: 'Finder' },
@@ -159,78 +182,15 @@ const navItems = [
 
 const searchRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
-const searchOptions = ref<Region[]>([])
+const searchResults = ref<Region[]>([])
 const searchLoading = ref(false)
-const searchLoaded = ref(false)
 const searchError = ref('')
 const openSuggestions = ref(false)
 const selectedSearchIndex = ref(0)
-
-const searchResults = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase('de-DE')
-  if (query.length < 2) {
-    return []
-  }
-
-  const scored = searchOptions.value
-    .map((item) => {
-      const name = item.name.toLocaleLowerCase('de-DE')
-      const stateName = item.state_name.toLocaleLowerCase('de-DE')
-      let score = 0
-
-      if (name === query) {
-        score += 200
-      } else if (name.startsWith(query)) {
-        score += 120
-      } else if (name.includes(query)) {
-        score += 80
-      }
-
-      if (stateName.startsWith(query)) {
-        score += 20
-      } else if (stateName.includes(query)) {
-        score += 10
-      }
-
-      if (item.ars.startsWith(query)) {
-        score += 40
-      }
-
-      return { item, score }
-    })
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => {
-      if (right.score !== left.score) {
-        return right.score - left.score
-      }
-      return left.item.name.localeCompare(right.item.name, 'de')
-    })
-    .slice(0, 8)
-
-  return scored.map((entry) => entry.item)
-})
-
-async function ensureSearchOptions() {
-  if (searchLoaded.value || searchLoading.value) {
-    return
-  }
-
-  searchLoading.value = true
-  searchError.value = ''
-  try {
-    const response = await fetchRegions()
-    searchOptions.value = response.items
-    searchLoaded.value = true
-  } catch (error) {
-    searchError.value = error instanceof Error ? error.message : 'Ortsliste konnte nicht geladen werden.'
-  } finally {
-    searchLoading.value = false
-  }
-}
+const mobileMenuOpen = ref(false)
 
 async function handleSearchFocus() {
   openSuggestions.value = true
-  await ensureSearchOptions()
 }
 
 function closeSuggestions() {
@@ -252,6 +212,7 @@ function moveSelection(direction: number) {
 function openRegion(slug: string) {
   searchQuery.value = ''
   openSuggestions.value = false
+  mobileMenuOpen.value = false
   selectedSearchIndex.value = 0
   router.push(`/region/${slug}`)
 }
@@ -286,6 +247,58 @@ watch(searchQuery, () => {
 })
 
 watch(
+  () => route.path,
+  () => {
+    mobileMenuOpen.value = false
+  }
+)
+
+let searchRequestId = 0
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  searchQuery,
+  (value) => {
+    openSuggestions.value = true
+    searchError.value = ''
+
+    if (searchTimer) {
+      clearTimeout(searchTimer)
+    }
+
+    const query = value.trim()
+    if (query.length < 2) {
+      searchLoading.value = false
+      searchResults.value = []
+      return
+    }
+
+    searchLoading.value = true
+    const requestId = ++searchRequestId
+    searchTimer = setTimeout(async () => {
+      try {
+        const response = await searchRegionsAutocomplete(query, 8)
+        if (requestId !== searchRequestId) {
+          return
+        }
+        searchResults.value = response.items
+      } catch (error) {
+        if (requestId !== searchRequestId) {
+          return
+        }
+        searchResults.value = []
+        searchError.value = error instanceof Error ? error.message : 'Orte konnten nicht geladen werden.'
+      } finally {
+        if (requestId === searchRequestId) {
+          searchLoading.value = false
+        }
+      }
+    }, 180)
+  },
+  { flush: 'post' }
+)
+
+watch(
   () => route.fullPath,
   () => {
     searchQuery.value = ''
@@ -299,6 +312,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
 })
 
 useSeoMeta({

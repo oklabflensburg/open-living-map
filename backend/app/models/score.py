@@ -20,5 +20,13 @@ class RegionScoreSnapshot(SQLModel, table=True):
     score_amenities: float = 0
     score_landuse: float = 0
     score_oepnv: float = 0
+    # Coverage fields: percentage of indicators available per category (0.0 to 1.0)
+    coverage_climate: float = Field(default=0.0)
+    coverage_air: float = Field(default=0.0)
+    coverage_safety: float = Field(default=0.0)
+    coverage_demographics: float = Field(default=0.0)
+    coverage_amenities: float = Field(default=0.0)
+    coverage_landuse: float = Field(default=0.0)
+    coverage_oepnv: float = Field(default=0.0)
     explanation_json: dict = Field(default_factory=dict, sa_column=Column(JSON))
     updated_at: datetime = Field(default_factory=datetime.utcnow)

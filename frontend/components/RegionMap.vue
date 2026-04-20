@@ -102,7 +102,7 @@ function renderMarkers() {
   const points = props.items.filter((item) => item.centroid_lat != null && item.centroid_lon != null)
   points.forEach((item) => {
     const marker = LLeaflet.marker([item.centroid_lat as number, item.centroid_lon as number], { icon: markerIcon })
-    marker.bindPopup(`${item.name} (${item.score_total.toFixed(1)})`)
+    marker.bindPopup(`${item.name} (Passung zum Suchprofil ${item.score_profile.toFixed(1)})`)
     marker.on('click', () => router.push(`/region/${item.slug || item.ars}`))
     marker.addTo(layer as import('leaflet').LayerGroup)
   })

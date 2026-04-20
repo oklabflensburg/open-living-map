@@ -1,6 +1,6 @@
 export default defineNuxtConfig({
   compatibilityDate: '2026-04-13',
-  devtools: { enabled: true },
+  devtools: { enabled: process.env.NODE_ENV !== 'production' },
   modules: ['@pinia/nuxt', '@nuxtjs/tailwindcss'],
   css: ['~/assets/css/main.css', 'leaflet/dist/leaflet.css'],
   experimental: {
@@ -39,6 +39,6 @@ export default defineNuxtConfig({
   },
   typescript: {
     strict: true,
-    typeCheck: false
+    typeCheck: process.env.CI === 'true' || process.env.NODE_ENV === 'production'
   }
 })

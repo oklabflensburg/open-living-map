@@ -104,6 +104,30 @@
           <p class="mt-2 text-2xl font-semibold text-slate-900">
             {{ station.raw_value !== null ? formatAirValue(station.raw_value) : 'keine Daten' }}
           </p>
+          <div
+            v-if="airStationComparison(station.indicator_key)"
+            class="mt-3 rounded-lg border px-3 py-2"
+            :class="airStationComparison(station.indicator_key)?.panelClass"
+          >
+            <p class="text-xs font-semibold uppercase tracking-wide" :class="airStationComparison(station.indicator_key)?.textClass">
+              Deutschlandweiter Vergleich
+            </p>
+            <div class="mt-2 flex items-center gap-2">
+              <span
+                v-for="level in [0, 1, 2]"
+                :key="level"
+                class="h-3 w-3 rounded-full border"
+                :class="airStationAmpelDotClass(station.indicator_key, level)"
+              />
+            </div>
+            <p class="mt-2 text-sm font-medium" :class="airStationComparison(station.indicator_key)?.textClass">
+              {{ airStationComparison(station.indicator_key)?.label }}
+            </p>
+            <p class="mt-1 text-xs text-slate-600">
+              Normierter Luft-Score {{ formatScoreValue(airStationComparison(station.indicator_key)?.normalizedValue || 0) }}
+              von 100 für {{ station.label }}.
+            </p>
+          </div>
           <p class="mt-1 text-xs text-slate-500">Proxy aus der nächstgelegenen Station</p>
           <a
             :href="station.station_page_url || station.measures_url"
@@ -200,8 +224,8 @@
     <div class="rounded-xl border border-slate-200 bg-white p-6">
       <h2 class="text-lg font-semibold">Berechnung und Datenbasis</h2>
       <p class="mt-2 text-sm text-slate-600">
-        Die Detailseite nutzt ein neutrales Basisprofil mit Gewicht 1 je Kategorie. Die Finder-Ergebnisse verwenden
-        deine individuell gesetzten Gewichtungen.
+        Die Detailseite zeigt den kanonischen Gesamtscore dieser Gemeinde mit neutralem Basisprofil.
+        Im Finder und auf der Ergebnisseite wird zusätzlich ein Profilscore für deine aktuell gesetzten Gewichtungen berechnet.
       </p>
       <div v-if="missingDemographics"
         class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -438,12 +462,73 @@ function formatAirValue(value: number) {
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value) + ' µg/m³'
 }
 
+function formatScoreValue(value: number) {
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)
+}
+
 function formatStationCoordinate(value: number) {
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 5, maximumFractionDigits: 5 }).format(value)
 }
 
 function indicatorByKey(key: string): RecommendationIndicatorDetail | null {
   return detail.value?.indicators.find((indicator) => indicator.key === key) ?? null
+}
+
+function airStationComparison(indicatorKey: string) {
+  const indicator = indicatorByKey(indicatorKey)
+  if (!indicator) {
+    return null
+  }
+
+  const normalizedValue = indicator.normalized_value
+  if (normalizedValue >= 66.7) {
+    return {
+      stage: 2,
+      label: 'vergleichsweise gute Luftwerte',
+      normalizedValue,
+      panelClass: 'border-emerald-200 bg-emerald-50/80',
+      textClass: 'text-emerald-800'
+    }
+  }
+
+  if (normalizedValue >= 33.3) {
+    return {
+      stage: 1,
+      label: 'mittlere Luftbelastung im Deutschlandvergleich',
+      normalizedValue,
+      panelClass: 'border-amber-200 bg-amber-50/80',
+      textClass: 'text-amber-800'
+    }
+  }
+
+  return {
+    stage: 0,
+    label: 'vergleichsweise hohe Luftbelastung',
+    normalizedValue,
+    panelClass: 'border-rose-200 bg-rose-50/80',
+    textClass: 'text-rose-800'
+  }
+}
+
+function airStationAmpelDotClass(indicatorKey: string, level: number) {
+  const comparison = airStationComparison(indicatorKey)
+  if (!comparison) {
+    return 'border-slate-200 bg-slate-100'
+  }
+
+  if (level > comparison.stage) {
+    return 'border-slate-200 bg-white'
+  }
+
+  if (comparison.stage === 2) {
+    return 'border-emerald-500 bg-emerald-500'
+  }
+
+  if (comparison.stage === 1) {
+    return level <= 1 ? 'border-amber-500 bg-amber-500' : 'border-slate-200 bg-white'
+  }
+
+  return level === 0 ? 'border-rose-500 bg-rose-500' : 'border-slate-200 bg-white'
 }
 
 const missingDemographics = computed(() => {

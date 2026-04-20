@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 
 from app.core.ars import normalize_ars, slugify_region_name
 from app.core.config import settings
-from app.core.db import engine, ensure_region_schema_compatibility
+from app.core.db import engine, check_schema_drift
 from app.models.indicator import RegionIndicatorValue
 from app.models.region import Region
 from app.models.score import RegionScoreSnapshot
@@ -1041,7 +1041,11 @@ def main() -> None:
             ags_reference["urn"],
             ags_reference["latest_version"] or ags_reference["latest_version_urn"],
         )
-    ensure_region_schema_compatibility()
+    if not check_schema_drift():
+        logger.warning(
+            "Schema drift detected during BKG import. Import may fail or produce incorrect results. "
+            "Run alembic migrations to fix schema issues."
+        )
     rows = fetch_bkg_regions()
     if not rows:
         logger.error(

@@ -1,10 +1,27 @@
-import type { GeoJsonFeatureCollection, RegionDetailResponse, RegionListResponse } from '~/types/api'
+import type {
+  GeoJsonFeatureCollection,
+  RegionDetailResponse,
+  RegionListResponse
+} from '~/types/api'
 
 export function useRegions() {
   const { apiFetch } = useApi()
 
-  const fetchRegions = async (): Promise<RegionListResponse> => {
-    return await apiFetch<RegionListResponse>('/regions')
+  const fetchRegions = async (params?: {
+    q?: string
+    state_code?: string | null
+    limit?: number
+    offset?: number
+  }): Promise<RegionListResponse> => {
+    return await apiFetch<RegionListResponse>('/regions', {
+      query: params
+    })
+  }
+
+  const searchRegionsAutocomplete = async (q: string, limit = 8): Promise<RegionListResponse> => {
+    return await apiFetch<RegionListResponse>('/regions/search/autocomplete', {
+      query: { q, limit }
+    })
   }
 
   const fetchRegion = async (ars: string): Promise<RegionDetailResponse> => {
@@ -24,5 +41,5 @@ export function useRegions() {
     return await apiFetch<GeoJsonFeatureCollection>(`/regions/state-boundaries${query}`)
   }
 
-  return { fetchRegions, fetchRegion, fetchAmenityPois, fetchAccidentPois, fetchStateBoundaries }
+  return { fetchRegions, searchRegionsAutocomplete, fetchRegion, fetchAmenityPois, fetchAccidentPois, fetchStateBoundaries }
 }

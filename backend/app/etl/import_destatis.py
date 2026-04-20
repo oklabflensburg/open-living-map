@@ -559,6 +559,15 @@ def _normalize_text(value: str) -> str:
 
 
 def _normalize_destatis_region_code(raw_code: str, region_type: str | None = None) -> str | None:
+    raw_digits = "".join(ch for ch in str(raw_code) if ch.isdigit())
+    city_state_codes = {
+        "02": "02000000",
+        "02000": "02000000",
+        "11": "11000000",
+        "11000": "11000000",
+    }
+    if raw_digits in city_state_codes:
+        return city_state_codes[raw_digits]
     code = normalize_ars(raw_code)
     if len(code) == 8:
         return code

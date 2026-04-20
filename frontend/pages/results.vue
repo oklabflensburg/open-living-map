@@ -6,6 +6,9 @@
         <p class="text-sm text-slate-500">
           Auswahl: {{ selectedStateName }}
         </p>
+        <p class="mt-2 text-sm text-slate-600">
+          Sortiert nach der Passung zu deinem Suchprofil. Der neutrale Gesamtscore der Gemeinde bleibt separat sichtbar.
+        </p>
       </div>
       <div class="w-full max-w-sm space-y-3">
         <StateSelect

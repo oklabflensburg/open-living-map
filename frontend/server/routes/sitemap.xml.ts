@@ -22,7 +22,7 @@ const rankingScopes = [
   'thueringen'
 ]
 
-const rankingCategories = ['climate', 'air', 'safety', 'demographics', 'amenities', 'oepnv']
+const rankingCategories = ['climate', 'air', 'safety', 'demographics', 'amenities', 'landuse', 'oepnv']
 
 type RegionListResponse = {
   items: RegionListItem[]

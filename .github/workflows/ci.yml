@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://wohnortkompass:wohnortkompass@127.0.0.1:5432/wohnortkompass
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: wohnortkompass
+          POSTGRES_USER: wohnortkompass
+          POSTGRES_PASSWORD: wohnortkompass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+    
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        pip install -e .
+    
+    - name: Lint with ruff
+      run: |
+        cd backend
+        pip install ruff
+        ruff check .
+    
+    - name: Check Python syntax
+      run: |
+        cd backend
+        find . -name "*.py" -type f | xargs python -m py_compile
+    
+    - name: Run migration check
+      run: |
+        cd backend
+        pip install alembic
+        alembic check
+    
+    - name: Run import smoke test
+      run: |
+        cd backend
+        python -c "from app.core.config import settings; print('Config loaded:', settings.app_name)"
+        python -c "from app.models.region import Region; print('Models import OK')"
+        python -c "from app.api.routes.regions import router; print('API routes import OK')"
+    
+    - name: Test database connection
+      run: |
+        cd backend
+        python -c "
+        from sqlmodel import create_engine, text
+        from app.core.config import settings
+        engine = create_engine(settings.database_url, echo=False)
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text('SELECT 1'))
+                print('Database connection OK:', result.scalar())
+        except Exception as e:
+            print(f'Database connection failed: {e}')
+            exit(1)
+        "
+
+  frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+        run_install: false
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'pnpm'
+        cache-dependency-path: frontend/pnpm-lock.yaml
+    
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        pnpm install --frozen-lockfile
+    
+    - name: Type check
+      run: |
+        cd frontend
+        pnpm run typecheck
+    
+    - name: Build
+      run: |
+        cd frontend
+        pnpm run build

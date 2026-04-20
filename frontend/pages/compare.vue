@@ -2,7 +2,7 @@
   <section>
     <h1 class="mb-4 text-2xl font-bold">Regionen vergleichen</h1>
 
-    <form class="mb-6 space-y-3" @submit.prevent="runCompare">
+    <div class="mb-6 space-y-3">
       <div ref="searchRef" class="relative">
         <div class="flex min-h-[3.25rem] flex-wrap items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm">
           <span
@@ -74,16 +74,13 @@
 
       <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <p class="text-sm text-slate-500">
-          Wähle bis zu drei Regionen aus. Die Karten darunter aktualisieren sich nach dem Vergleich.
+          Wähle bis zu drei Regionen aus. Der Vergleich aktualisiert sich sofort nach jeder Auswahl.
         </p>
-        <button class="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white transition hover:bg-blue-800" type="submit">
-          Vergleichen
-        </button>
       </div>
-    </form>
+    </div>
 
     <div class="grid gap-4 md:grid-cols-3">
-      <RegionCard v-for="item in items" :key="item.ars" :item="item" />
+      <RegionCard v-for="item in items" :key="item.ars" :item="item" :show-profile-context="false" />
     </div>
   </section>
 </template>
@@ -93,20 +90,26 @@ import RegionCard from '~/components/RegionCard.vue'
 import type { RecommendationItem, Region } from '~/types/api'
 
 const { siteName, absoluteUrl } = useSiteSeo()
+const route = useRoute()
+const router = useRouter()
 const { fetchCompare } = useRecommendations()
-const { fetchRegions } = useRegions()
+const { searchRegionsAutocomplete } = useRegions()
+const compareStore = useCompareStore()
 
 const searchRef = ref<HTMLElement | null>(null)
-const searchQuery = ref('')
-const searchOptions = ref<Region[]>([])
+const searchResults = ref<Region[]>([])
 const searchLoading = ref(false)
-const searchLoaded = ref(false)
 const searchError = ref('')
 const openSuggestions = ref(false)
 const selectedSearchIndex = ref(0)
-const selectedRegions = ref<Region[]>([])
 const items = ref<RecommendationItem[]>([])
-const defaultRegionPrefixes = ['09162', '06412', '05315']
+const compareReady = ref(false)
+const suppressNextSuggestionOpen = ref(false)
+const searchQuery = computed({
+  get: () => compareStore.search_query,
+  set: (value: string) => compareStore.setSearchQuery(value)
+})
+const selectedRegions = computed(() => compareStore.selected_regions)
 
 const title = 'Vergleich'
 const description = 'Vergleiche bis zu drei Regionen direkt anhand ihrer Teil-Scores und Datenbasis.'
@@ -167,72 +170,42 @@ useHead(() => ({
   ]
 }))
 
-const searchResults = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase('de-DE')
-  if (query.length < 2 || selectedRegions.value.length >= 3) {
-    return []
+function recommendationItemToRegion(item: RecommendationItem): Region {
+  return {
+    ars: item.ars,
+    slug: item.slug,
+    name: item.name,
+    level: item.level,
+    state_code: '',
+    state_name: item.state_name,
+    district_name: item.district_name,
+    population: null,
+    area_km2: null,
+    centroid_lat: item.centroid_lat,
+    centroid_lon: item.centroid_lon,
+    wikidata_id: null,
+    wikidata_url: null,
+    wikipedia_url: null
   }
+}
 
-  const selectedArs = new Set(selectedRegions.value.map((item) => item.ars))
-  return searchOptions.value
-    .filter((item) => !selectedArs.has(item.ars))
-    .map((item) => {
-      const name = item.name.toLocaleLowerCase('de-DE')
-      const stateName = item.state_name.toLocaleLowerCase('de-DE')
-      let score = 0
-
-      if (name === query) {
-        score += 200
-      } else if (name.startsWith(query)) {
-        score += 120
-      } else if (name.includes(query)) {
-        score += 80
-      }
-
-      if (stateName.startsWith(query)) {
-        score += 20
-      } else if (stateName.includes(query)) {
-        score += 10
-      }
-
-      if (item.ars.startsWith(query)) {
-        score += 40
-      }
-
-      return { item, score }
-    })
-    .filter((entry) => entry.score > 0)
-    .sort((left, right) => {
-      if (right.score !== left.score) {
-        return right.score - left.score
-      }
-      return left.item.name.localeCompare(right.item.name, 'de')
-    })
-    .slice(0, 8)
-    .map((entry) => entry.item)
-})
-
-async function ensureSearchOptions() {
-  if (searchLoaded.value || searchLoading.value) {
+async function syncCompareUrl() {
+  const ars = selectedRegions.value.map((item) => item.ars).slice(0, 3)
+  const nextArs = ars.length ? ars.join(',') : undefined
+  const currentArs = typeof route.query.ars === 'string' ? route.query.ars : undefined
+  if (nextArs === currentArs) {
     return
   }
-
-  searchLoading.value = true
-  searchError.value = ''
-  try {
-    const response = await fetchRegions()
-    searchOptions.value = response.items
-    searchLoaded.value = true
-  } catch (error) {
-    searchError.value = error instanceof Error ? error.message : 'Ortsliste konnte nicht geladen werden.'
-  } finally {
-    searchLoading.value = false
-  }
+  await router.replace({
+    query: {
+      ...route.query,
+      ars: nextArs
+    }
+  })
 }
 
 async function handleSearchFocus() {
   openSuggestions.value = true
-  await ensureSearchOptions()
 }
 
 function closeSuggestions() {
@@ -255,14 +228,15 @@ function addRegion(region: Region) {
   if (selectedRegions.value.some((item) => item.ars === region.ars) || selectedRegions.value.length >= 3) {
     return
   }
-  selectedRegions.value = [...selectedRegions.value, region]
-  searchQuery.value = ''
+  suppressNextSuggestionOpen.value = true
+  compareStore.addRegion(region)
+  compareStore.clearSearchQuery()
   selectedSearchIndex.value = 0
   openSuggestions.value = false
 }
 
 function removeRegion(ars: string) {
-  selectedRegions.value = selectedRegions.value.filter((item) => item.ars !== ars)
+  compareStore.removeRegion(ars)
 }
 
 function selectHighlightedResult() {
@@ -271,11 +245,12 @@ function selectHighlightedResult() {
     return
   }
   addRegion(region)
+  closeSuggestions()
 }
 
 function handleBackspace() {
   if (searchQuery.value.length === 0 && selectedRegions.value.length) {
-    selectedRegions.value = selectedRegions.value.slice(0, -1)
+    compareStore.popRegion()
   }
 }
 
@@ -305,21 +280,91 @@ watch(searchQuery, () => {
   selectedSearchIndex.value = 0
 })
 
-onMounted(async () => {
-  document.addEventListener('click', handleDocumentClick)
-  await ensureSearchOptions()
+watch(
+  () => selectedRegions.value.map((item) => item.ars).join(','),
+  async () => {
+    await syncCompareUrl()
+    if (!compareReady.value) {
+      return
+    }
+    await runCompare()
+  }
+)
 
-  if (!selectedRegions.value.length && searchOptions.value.length) {
-    selectedRegions.value = defaultRegionPrefixes
-      .map((prefix) => searchOptions.value.find((item) => item.ars.startsWith(prefix)))
-      .filter((item): item is Region => Boolean(item))
-      .slice(0, 3)
+let searchRequestId = 0
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  searchQuery,
+  (value) => {
+    if (suppressNextSuggestionOpen.value) {
+      suppressNextSuggestionOpen.value = false
+    } else {
+      openSuggestions.value = true
+    }
+    searchError.value = ''
+
+    if (searchTimer) {
+      clearTimeout(searchTimer)
+    }
+
+    const query = value.trim()
+    if (query.length < 2 || selectedRegions.value.length >= 3) {
+      searchLoading.value = false
+      searchResults.value = []
+      return
+    }
+
+    searchLoading.value = true
+    const selectedArs = new Set(selectedRegions.value.map((item) => item.ars))
+    const requestId = ++searchRequestId
+    searchTimer = setTimeout(async () => {
+      try {
+        const response = await searchRegionsAutocomplete(query, 8)
+        if (requestId !== searchRequestId) {
+          return
+        }
+        searchResults.value = response.items.filter((item) => !selectedArs.has(item.ars))
+      } catch (error) {
+        if (requestId !== searchRequestId) {
+          return
+        }
+        searchResults.value = []
+        searchError.value = error instanceof Error ? error.message : 'Orte konnten nicht geladen werden.'
+      } finally {
+        if (requestId === searchRequestId) {
+          searchLoading.value = false
+        }
+      }
+    }, 180)
+  },
+  { flush: 'post' }
+)
+
+onMounted(async () => {
+  compareStore.hydrate()
+  document.addEventListener('click', handleDocumentClick)
+  const routeArs = typeof route.query.ars === 'string'
+    ? route.query.ars.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 3)
+    : []
+
+  if (routeArs.length) {
+    const response = await fetchCompare(routeArs)
+    items.value = response.items
+    compareStore.setSelectedRegions(response.items.map(recommendationItemToRegion))
+    compareReady.value = true
+    return
   }
 
+  await syncCompareUrl()
+  compareReady.value = true
   await runCompare()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+  }
 })
 </script>

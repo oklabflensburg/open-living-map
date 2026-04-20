@@ -40,6 +40,7 @@ export interface RecommendationItem {
   centroid_lat: number | null
   centroid_lon: number | null
   score_total: number
+  score_profile: number
   score_climate: number
   score_air: number
   score_safety: number
@@ -47,6 +48,13 @@ export interface RecommendationItem {
   score_amenities: number
   score_landuse: number
   score_oepnv: number
+  coverage_climate: number
+  coverage_air: number
+  coverage_safety: number
+  coverage_demographics: number
+  coverage_amenities: number
+  coverage_landuse: number
+  coverage_oepnv: number
   reason: string
   score_formula: string
   calculation_details: string[]

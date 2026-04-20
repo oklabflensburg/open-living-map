@@ -24,4 +24,8 @@ def compare(
         oepnv_weight=1,
     )
     service = ScoringService(session)
-    return service.get_recommendations(default_weights, include_ars=ars_list)
+    return service.get_recommendations(
+        default_weights,
+        include_ars=ars_list,
+        persist_session=False,
+    )

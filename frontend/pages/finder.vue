@@ -1,63 +1,73 @@
 <template>
-  <section class="mx-auto max-w-4xl space-y-6">
-    <h1 class="mb-4 text-2xl font-bold">Gewichtungen festlegen</h1>
-
-    <div class="grid gap-6 lg:grid-cols-2">
-      <PreferenceForm v-model="form" @submit="submit" />
-
-      <div class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 class="text-lg font-semibold">So wird dein Score berechnet</h2>
-        <p class="text-sm text-slate-700">
-          Jede Kategorie hat einen Teil-Score von 0 bis 100. Diese Teil-Scores werden mit deinen Gewichten (0 bis 5)
-          kombiniert. Wenn alle Gewichte 0 sind, ist der Gesamtscore 0.
-        </p>
-
-        <div class="rounded bg-slate-50 p-3 text-xs text-slate-700">
-          <p class="font-semibold">Formel</p>
-          <p>
-            Gesamt = (Klima×{{ form.climate_weight }} + Luft×{{ form.air_weight }} + Sicherheit×{{ form.safety_weight
-            }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + Flächennutzung×{{ form.landuse_weight }} + ÖPNV×{{
-              form.oepnv_weight
-            }}) / {{ weightSum }}
-          </p>
-        </div>
-
-        <div class="text-xs text-slate-600">
-          Effektive Anteile:
-          Klima {{ effectiveWeights.climate }}% ·
-          Luft {{ effectiveWeights.air }}% ·
-          Sicherheit {{ effectiveWeights.safety }}% ·
-          Demografie {{ effectiveWeights.demographics }}% ·
-          Alltagsnähe {{ effectiveWeights.amenities }}% ·
-          Flächennutzung {{ effectiveWeights.landuse }}% ·
-          ÖPNV {{ effectiveWeights.oepnv }}%
-        </div>
-      </div>
+  <section class="mx-auto max-w-7xl space-y-6">
+    <div class="space-y-2">
+      <h1 class="text-2xl font-bold">Gewichtungen festlegen</h1>
+      <p class="max-w-3xl text-sm text-slate-600">
+        Lege fest, welche Themen für dich wichtig sind. Die linke Spalte steuert die Gewichtung, die rechte Spalte
+        zeigt direkt, wie der Score zusammengesetzt ist und welche Kennzahlen dahinterstehen.
+      </p>
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 class="mb-4 text-lg font-semibold">Welche Werte dahinterstehen</h2>
-      <div class="grid gap-4 md:grid-cols-2">
-        <article
-          v-for="item in categoryDetails"
-          :key="item.key"
-          class="rounded-xl border p-4 shadow-sm"
-          :class="item.cardClass"
-        >
-          <p class="text-xs font-semibold uppercase tracking-wide" :class="item.kickerClass">{{ item.kicker }}</p>
-          <h3 class="mt-2 font-semibold text-slate-900">{{ item.title }}</h3>
-          <p class="mt-1 text-sm text-slate-700">{{ item.description }}</p>
-          <p class="mt-3 text-xs font-medium text-slate-500">Enthaltene Kennzahlen</p>
-          <p class="mt-1 text-sm text-slate-700">{{ item.indicators.join(', ') }}</p>
-          <p class="mt-3 text-xs font-medium text-slate-500">Bewertungslogik</p>
-          <p class="mt-1 text-sm text-slate-700">{{ item.direction }}</p>
-        </article>
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)] xl:items-start">
+      <div class="xl:sticky xl:top-28">
+        <PreferenceForm v-model="form" @submit="submit" />
       </div>
 
-      <p class="mt-4 text-xs text-slate-500">
-        Hinweis: Alle Indikatoren werden auf 0 bis 100 normiert. Danach wird pro Kategorie gemittelt und anschließend
-        mit deinen Gewichten verrechnet.
-      </p>
+      <div class="space-y-6">
+        <div class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 class="text-lg font-semibold">So wird dein Score berechnet</h2>
+          <p class="text-sm text-slate-700">
+            Jede Kategorie hat einen Teil-Score von 0 bis 100. Diese Teil-Scores werden mit deinen Gewichten (0 bis 5)
+            kombiniert. Wenn alle Gewichte 0 sind, ist der Gesamtscore 0.
+          </p>
+
+          <div class="rounded bg-slate-50 p-3 text-xs text-slate-700">
+            <p class="font-semibold">Formel</p>
+            <p>
+              Gesamt = (Klima×{{ form.climate_weight }} + Luft×{{ form.air_weight }} + Sicherheit×{{ form.safety_weight
+              }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + Flächennutzung×{{ form.landuse_weight }} + ÖPNV×{{
+                form.oepnv_weight
+              }}) / {{ weightSum }}
+            </p>
+          </div>
+
+          <div class="text-xs text-slate-600">
+            Effektive Anteile:
+            Klima {{ effectiveWeights.climate }}% ·
+            Luft {{ effectiveWeights.air }}% ·
+            Sicherheit {{ effectiveWeights.safety }}% ·
+            Demografie {{ effectiveWeights.demographics }}% ·
+            Alltagsnähe {{ effectiveWeights.amenities }}% ·
+            Flächennutzung {{ effectiveWeights.landuse }}% ·
+            ÖPNV {{ effectiveWeights.oepnv }}%
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 class="mb-4 text-lg font-semibold">Welche Werte dahinterstehen</h2>
+          <div class="grid gap-4 md:grid-cols-2">
+            <article
+              v-for="item in categoryDetails"
+              :key="item.key"
+              class="rounded-xl border p-4 shadow-sm"
+              :class="item.cardClass"
+            >
+              <p class="text-xs font-semibold uppercase tracking-wide" :class="item.kickerClass">{{ item.kicker }}</p>
+              <h3 class="mt-2 font-semibold text-slate-900">{{ item.title }}</h3>
+              <p class="mt-1 text-sm text-slate-700">{{ item.description }}</p>
+              <p class="mt-3 text-xs font-medium text-slate-500">Enthaltene Kennzahlen</p>
+              <p class="mt-1 text-sm text-slate-700">{{ item.indicators.join(', ') }}</p>
+              <p class="mt-3 text-xs font-medium text-slate-500">Bewertungslogik</p>
+              <p class="mt-1 text-sm text-slate-700">{{ item.direction }}</p>
+            </article>
+          </div>
+
+          <p class="mt-4 text-xs text-slate-500">
+            Hinweis: Alle Indikatoren werden auf 0 bis 100 normiert. Danach wird pro Kategorie gemittelt und anschließend
+            mit deinen Gewichten verrechnet.
+          </p>
+        </div>
+      </div>
     </div>
   </section>
 </template>
