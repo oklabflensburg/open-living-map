@@ -94,6 +94,7 @@ class RegionRepository:
         postal_prefix = f"{raw_query}%"
         state_filter = "AND r.state_code = :state_code" if state_code else ""
         is_exact_postal = bool(re.fullmatch(r"\d{5}", raw_query))
+        is_numeric_query = raw_query.isdigit()
 
         if is_exact_postal:
             rows = self.session.execute(
@@ -119,6 +120,46 @@ class RegionRepository:
             ).all()
             if rows:
                 return [str(row[0]) for row in rows]
+
+        if not is_numeric_query:
+            rows = self.session.execute(
+                text(
+                    f"""
+                    SELECT r.ars
+                    FROM region r
+                    WHERE (
+                           lower(r.name) LIKE :contains_pattern
+                       OR lower(r.state_name) LIKE :contains_pattern
+                    )
+                      {state_filter}
+                    ORDER BY
+                        CASE
+                            WHEN lower(r.name) = :query THEN 0
+                            WHEN lower(r.name) LIKE :prefix_pattern THEN 1
+                            WHEN lower(r.state_name) = :query THEN 2
+                            WHEN lower(r.state_name) LIKE :prefix_pattern THEN 3
+                            ELSE 4
+                        END,
+                        GREATEST(
+                            similarity(lower(r.name), :query),
+                            similarity(lower(r.state_name), :query)
+                        ) DESC,
+                        char_length(r.name),
+                        r.name
+                    LIMIT :limit
+                    OFFSET :offset
+                    """
+                ),
+                {
+                    "query": query,
+                    "contains_pattern": contains_pattern,
+                    "prefix_pattern": prefix_pattern,
+                    "limit": limit,
+                    "offset": offset,
+                    **({"state_code": state_code} if state_code else {}),
+                },
+            ).all()
+            return [str(row[0]) for row in rows]
 
         rows = self.session.execute(
             text(
