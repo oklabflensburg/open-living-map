@@ -70,17 +70,20 @@
           separat auf eine gemeinsame Skala von 0 bis 100 transformiert.
         </p>
         <p>
-          Technisch geschieht das als logarithmische Min-Max-Normierung über alle Regionen eines Zeitstands:
-          Zuerst werden die Rohwerte logarithmisch gestaucht, damit extreme Ausreißer die Skala nicht dominieren.
-          Anschließend wird der kleinste beobachtete Wert zu 0 und der größte zu 100. Liegen alle Werte identisch
-          vor, wird standardmäßig 50 vergeben.
+          Technisch nutzt das System dafür je nach Indikator unterschiedliche Normierungsmodi. Viele Kennzahlen
+          werden logarithmisch skaliert, damit extreme Ausreißer die Skala nicht dominieren. Andere laufen bewusst
+          linear oder als robuste Perzentil-Skalierung, wenn das fachlich besser passt. In allen Fällen werden die
+          Werte auf eine gemeinsame Skala von 0 bis 100 transformiert. Liegen alle Werte identisch vor, wird
+          standardmäßig 50 vergeben.
         </p>
         <div class="rounded-lg bg-slate-50 p-4 text-xs text-slate-700">
           <p class="font-semibold">Vereinfachte Formel</p>
-          <p class="mt-1">Score = ((log(1 + Wert) − Minimum) / (Maximum − Minimum)) × 100</p>
+          <p class="mt-1">Score = ((skalierter Wert − Minimum) / (Maximum − Minimum)) × 100</p>
           <p class="mt-2">
-            Für Indikatoren mit `lower_is_better` wird das Ergebnis anschließend invertiert. Dann gilt also:
-            wenig NO₂, wenig PM10, wenig Unfälle oder wenig Hitzetage ergeben einen höheren Score.
+            Je nach Indikator ist der „skalierte Wert“ dabei zum Beispiel `log(1 + Wert)`, ein linearer Rohwert
+            oder ein auf 5.-95. Perzentil begrenzter Wert. Für Indikatoren mit `lower_is_better` wird das Ergebnis
+            anschließend invertiert. Dann gilt also: wenig NO₂, wenig PM10, wenig Unfälle oder wenig Hitzetage
+            ergeben einen höheren Score.
           </p>
         </div>
       </div>
@@ -98,7 +101,8 @@
           Für einzelne Kategorien mit stark unterschiedlichen Kennzahlen nutzt das System jedoch eine fachlich
           begründete interne Gewichtung. Das betrifft aktuell insbesondere den ÖPNV, damit Dichte, absolute
           Angebotsmasse und Regelmäßigkeit gemeinsam abgebildet werden. Fehlen für eine Kategorie alle Werte,
-          erhält die Region dort aktuell 0 Punkte.
+          wird der Kategorie-Score zwar im Snapshot als `0` gespeichert, bei personalisierten Gesamtscores aber
+          nicht wie ein echter fachlicher Nullwert behandelt.
         </p>
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <article
@@ -124,14 +128,15 @@
         </p>
         <p>
           Der persönliche Gesamtscore ist ein gewichteter Mittelwert der sieben Kategorie-Scores. Kategorien mit
-          Gewicht 0 fließen nicht ein. Wenn alle Gewichte 0 sind, ergibt sich konsequent ein Gesamtscore von 0.
+          Gewicht 0 fließen nicht ein. Kategorien ohne Datenabdeckung werden zusätzlich aus der Berechnung
+          herausgenommen, damit fehlende Daten nicht automatisch wie schlechte Werte wirken. Wenn alle Gewichte 0
+          sind oder für keine gewichtete Kategorie Daten vorliegen, ergibt sich konsequent ein Gesamtscore von 0.
         </p>
         <div class="rounded-lg bg-slate-50 p-4 text-xs text-slate-700">
           <p class="font-semibold">Vereinfachte Finder-Formel</p>
           <p class="mt-1">
-            Gesamtscore = (Klima × Gewicht + Luft × Gewicht + Verkehrssicherheit × Gewicht +
-            Demografie/Familie × Gewicht + Alltagsnähe × Gewicht + Flächennutzung × Gewicht +
-            ÖPNV × Gewicht) / Summe aller Gewichte
+            Gesamtscore = Summe aus (Kategorie-Score × Gewicht) / Summe aller Gewichte mit vorhandener
+            Datenabdeckung
           </p>
         </div>
       </div>
@@ -179,7 +184,7 @@
           <p class="mt-2 text-sm text-slate-700">{{ source.projectUse }}</p>
           <p class="mt-3 text-xs font-medium text-slate-500">Lizenz</p>
           <p class="mt-1 text-sm text-slate-700">{{ source.license }}</p>
-          <p v-if="source.attribution" class="mt-3 text-xs font-medium text-slate-500">Empfohlene Quellenangabe</p>
+          <p v-if="source.attribution" class="mt-3 text-xs font-medium text-slate-500">Quellenangabe</p>
           <p v-if="source.attribution" class="mt-1 text-sm text-slate-700">{{ source.attribution }}</p>
           <p v-if="source.note" class="mt-3 text-xs text-slate-600">{{ source.note }}</p>
           <div class="mt-3 flex flex-wrap gap-2 text-xs">
@@ -194,11 +199,6 @@
           </div>
         </article>
       </div>
-      <p class="mt-4 text-xs text-slate-500">
-        Die Übersicht folgt inhaltlich der README des Projekts. Wo ein Dienst keine eigenständige Lizenz auf der
-        Datensatzseite ausweist, ist das hier als Einordnung oder Ableitung aus der offiziellen Anbieter-Dokumentation
-        gekennzeichnet.
-      </p>
     </div>
   </section>
 </template>
@@ -272,8 +272,7 @@ const licensedSources = [
     title: 'BKG VG25',
     projectUse: 'Das BKG liefert Gemeinde- und Bundeslandgeometrien als räumliche Grundlage des gesamten Projekts.',
     license: 'CC BY 4.0',
-    attribution: '© BKG (Jahr des letzten Datenbezugs) CC BY 4.0',
-    note: 'Bei veränderten Daten ist laut BKG zusätzlich ein Veränderungshinweis anzubringen.',
+    attribution: '© BKG (2026) CC BY 4.0',
     links: [
       'https://sgx.geodatenzentrum.de/wfs_vg250-ew',
       'https://gdz.bkg.bund.de/index.php/default/digitale-geodaten/verwaltungsgebiete/verwaltungsgebiete-1-25-000-stand-31-12-vg25.html',
@@ -284,7 +283,7 @@ const licensedSources = [
     title: 'Destatis, Regionalstatistik und XRepository',
     projectUse: 'Destatis und die Regionalstatistik liefern Demografie- und Referenzdaten. XRepository wird im ETL für AGS- und Kreis-Schlüsselräume genutzt.',
     license: 'Datenlizenz Deutschland – Namensnennung – Version 2.0 (dl-de/by-2-0)',
-    attribution: 'Datenquelle: Statistisches Bundesamt (Destatis), Genesis-Online bzw. Destatis-Referenzdaten, <Abrufdatum>; Datenlizenz by-2-0',
+    attribution: 'Datenquelle: Statistisches Bundesamt (Destatis), Genesis-Online bzw. Destatis-Referenzdaten, 19.04.2026; Datenlizenz by-2-0',
     note: 'Für XRepository-Codelisten ist auf den Detailseiten keine eigenständige Lizenz ausgewiesen. Im Projekt werden sie daher als Destatis-Referenzdaten im Open-Data-Kontext von Destatis behandelt. Das ist eine Einordnung aus den offiziellen Destatis-Open-Data-Hinweisen.',
     links: [
       'https://www.regionalstatistik.de/genesis/online',
@@ -300,8 +299,7 @@ const licensedSources = [
     title: 'DWD',
     projectUse: 'Der Deutsche Wetterdienst liefert die Klimaindikatoren wie Hitzetage, Sommertage und Niederschlag.',
     license: 'CC BY 4.0',
-    attribution: 'Quelle: Deutscher Wetterdienst (DWD)',
-    note: 'Die konkrete Produktdokumentation des jeweils verwendeten Open-Data-Produkts ist zusätzlich zu beachten.',
+    attribution: 'Deutscher Wetterdienst (DWD)',
     links: [
       'https://opendata.dwd.de/',
       'https://opendata.dwd.de/climate_environment/REA/Nutzungsbedingungen_German.pdf',
@@ -336,7 +334,7 @@ const licensedSources = [
     title: 'Flächenatlas',
     projectUse: 'Der Flächenatlas liefert amtliche Kennzahlen zur Flächennutzung auf Gemeindeebene und bildet im Projekt die eigene Kategorie Flächennutzung.',
     license: 'Datenlizenz Deutschland 2.0 für die statistischen Daten; bei kartografischen Anwendungen gelten zusätzlich die Lizenzhinweise des jeweiligen Atlas.',
-    attribution: 'Datenquelle: Statistisches Bundesamt (Destatis), Flächenatlas / Flächenerhebung, <Abrufdatum>; Datenlizenz by-2-0',
+    attribution: 'Datenquelle: Statistisches Bundesamt (Destatis), Flächenatlas / Flächenerhebung, 2019; Datenlizenz by-2-0',
     note: 'Die Einordnung folgt den allgemeinen Destatis-Open-Data-Hinweisen für statistische Daten. Für den hier genutzten XLSX-Datensatz ist auf der Download-URL selbst keine separate Lizenzseite ausgewiesen.',
     links: [
       'https://service.destatis.de/DE/karten/flaechenatlas2019daten.xlsx',
@@ -349,7 +347,6 @@ const licensedSources = [
     projectUse: 'OpenData ÖPNV und DELFI liefern die GTFS-Fahrplandaten für Haltestellendichte, Abfahrten und Regelmäßigkeit.',
     license: 'Für DELFI laut OpenData-ÖPNV-Archiv: CC-BY in aktueller Fassung',
     attribution: 'Quelle: DELFI / OpenData ÖPNV gemäß Datensatzlizenz',
-    note: 'Das Portal selbst hat keine einheitliche Lizenz für alle Datensätze. Maßgeblich bleibt immer die Lizenz des konkret verwendeten Anbieters oder Datensatzes.',
     links: [
       'https://www.opendata-oepnv.de/ht/de/datensaetze',
       'https://www.opendata-oepnv.de/fileadmin/datasets/delfi/20260413_fahrplaene_gesamtdeutschland_gtfs.zip',
@@ -359,8 +356,7 @@ const licensedSources = [
   {
     title: 'Wikidata und Wikipedia',
     projectUse: 'Wikidata wird für die Anreicherung von Regionsmetadaten genutzt. Wikipedia wird im Projekt vor allem als ausgehender Link zur Region angezeigt.',
-    license: 'Wikidata-Structured-Data: CC0. Wikipedia-Texte: CC BY-SA, soweit Inhalte direkt übernommen werden.',
-    attribution: 'Bei direkter Textübernahme aus Wikipedia ist eine CC-BY-SA-konforme Attribution erforderlich. Für reine Verlinkung ist das nicht einschlägig.',
+    license: 'Wikidata-Structured-Data: CC0.',
     note: 'Im Projekt werden aus Wikipedia selbst keine Fließtexte importiert, sondern nur Ziel-URLs erzeugt. Die eigentliche strukturierte Anreicherung erfolgt über Wikidata.',
     links: [
       'https://query.wikidata.org/sparql',
@@ -515,8 +511,8 @@ const limitations = [
     text: 'Die Quellen stammen aus unterschiedlichen Veröffentlichungszyklen. Klima, Luft, OSM, Regionalstatistik und GTFS können zeitlich auseinanderliegen.'
   },
   {
-    title: 'Fehlende Daten drücken einzelne Kategorien',
-    text: 'Wenn für eine Region in einer Kategorie aktuell keine verwertbaren Werte vorliegen, fällt der Kategorie-Score derzeit auf 0. Das ist transparent, aber fachlich nicht dasselbe wie „schlecht“.'
+    title: 'Fehlende Daten bleiben ein Qualitätsrisiko',
+    text: 'Wenn für eine Region in einer Kategorie aktuell keine verwertbaren Werte vorliegen, wird das im System als fehlende Abdeckung markiert. Personalisierte Gesamtscores behandeln diese Kategorie dann nicht wie einen echten Nullwert. Trotzdem bleibt die Vergleichbarkeit eingeschränkt, solange Datengrundlagen unvollständig sind.'
   },
   {
     title: 'Regionale Nähe ist teilweise proxy-basiert',
