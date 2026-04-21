@@ -6,9 +6,7 @@
       <nav class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div class="flex items-center justify-between gap-4">
           <NuxtLink to="/" class="group inline-flex items-center gap-3">
-            <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 text-sm font-black tracking-tight text-white shadow-lg shadow-sky-200">
-              WK
-            </span>
+            <AppLogo class="h-14 w-14" />
             <span>
               <span class="block text-lg font-black tracking-tight text-slate-950 transition group-hover:text-sky-700">Wohnort-Kompass</span>
               <span class="block text-xs font-medium text-slate-500">Offene Daten für Regionen in Deutschland</span>
@@ -123,7 +121,7 @@
       <div class="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 md:grid-cols-[1.2fr_1fr_1fr] lg:px-8">
         <div class="space-y-3">
           <div class="flex items-center gap-3">
-            <span class="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 text-xs font-black text-white">WK</span>
+            <AppLogo class="h-12 w-12" />
             <div>
               <p class="font-semibold text-slate-900">{{ siteName }}</p>
               <p class="text-sm text-slate-600">Offene Daten für Regionen in Deutschland.</p>
@@ -333,10 +331,10 @@ useSeoMeta({
   description: siteDescription,
   ogSiteName: siteName,
   ogLocale: siteLocale,
-  ogImage: absoluteUrl('/og-image.png'),
-  ogImageSecureUrl: absoluteUrl('/og-image.png'),
+  ogImage: absoluteUrl('/logo.png'),
+  ogImageSecureUrl: absoluteUrl('/logo.png'),
   ogImageAlt: 'Wohnort-Kompass: Regionen in Deutschland mit offenen Daten vergleichen',
-  twitterImage: absoluteUrl('/og-image.png'),
+  twitterImage: absoluteUrl('/logo.png'),
   twitterImageAlt: 'Wohnort-Kompass: Regionen in Deutschland mit offenen Daten vergleichen',
   twitterCard: 'summary_large_image'
 })

@@ -13,11 +13,14 @@
       aria-live="polite"
       aria-busy="true"
     >
-      <div class="flex items-center gap-3 rounded-2xl border border-white/70 bg-white/92 px-5 py-4 shadow-[0_24px_80px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/70">
-        <span class="h-5 w-5 animate-spin rounded-full border-2 border-sky-200 border-t-sky-600" />
+      <div class="flex items-center gap-4 rounded-2xl border border-white/70 bg-white/92 px-5 py-4 shadow-[0_24px_80px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/70">
+        <AppLogo class="h-14 w-14" />
         <div>
           <p class="text-sm font-semibold text-slate-900">Daten werden geladen</p>
-          <p class="text-xs text-slate-500">Einen Moment bitte.</p>
+          <div class="mt-1 flex items-center gap-2 text-xs text-slate-500">
+            <span class="h-4 w-4 animate-spin rounded-full border-2 border-sky-200 border-t-sky-600" />
+            <span>Einen Moment bitte.</span>
+          </div>
         </div>
       </div>
     </div>
