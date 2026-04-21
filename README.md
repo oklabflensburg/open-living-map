@@ -226,7 +226,7 @@ Frontend:
 
 ### Backend
 
-Die wichtigsten Variablen stehen in [backend/.env.example](backend/.env.example).
+Alle Backend-Settings werden aus [backend/.env.example](backend/.env.example) abgeleiteten Werten in `backend/.env` geladen.
 
 Wesentliche Schalter:
 
@@ -252,6 +252,8 @@ Wesentliche Schalter:
   Umweltbundesamt-API
 - `BKG_MUNICIPALITY_TABLE`
   lokale BKG-Gemeindetabelle
+- `BKG_DISTRICT_TABLE`
+  lokale BKG-Kreistabelle
 - `BKG_GEOMETRY_COLUMN`
   Geometriespalte der BKG-Tabelle
 - `BKG_GEOMETRY_FLAVOUR`

@@ -25,7 +25,8 @@ class RegionIndicatorValue(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     region_id: int = Field(foreign_key="region.id", index=True)
-    indicator_id: int = Field(foreign_key="indicator_definition.id", index=True)
+    indicator_id: int = Field(
+        foreign_key="indicator_definition.id", index=True)
     period: str = Field(index=True)
     raw_value: float
     normalized_value: float

@@ -33,7 +33,9 @@ def startup() -> None:
     try:
         assert_schema_is_current()
     except SchemaDriftError:
-        logger.exception("Startup aborted because the database schema is outdated.")
+        logger.exception(
+            "Startup aborted because the database schema is outdated."
+        )
         raise
     logger.info("Schema checks passed.")
 
