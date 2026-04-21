@@ -44,6 +44,34 @@
         </div>
 
         <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 class="text-lg font-semibold">Worauf du beim Ranking achten solltest</h2>
+          <div class="mt-3 space-y-3 text-sm text-slate-700">
+            <p>
+              Der Finder berechnet keinen neutralen Amtsscore, sondern eine personalisierte
+              <span class="font-semibold text-slate-900">Passung zu deinem Suchprofil</span>.
+              Hohe Gewichte verschieben das Ranking bewusst in Richtung der von dir priorisierten Kategorien.
+            </p>
+            <p>
+              Kategorien mit unvollständiger Datenabdeckung fließen später nicht blind als `0` ein. Stattdessen werden
+              nur Kategorien mit vorhandener Datenbasis für den Profilscore berücksichtigt.
+            </p>
+            <p>
+              Einige Daten beruhen auf
+              <span class="font-semibold text-slate-900">Proxy- oder Stationszuordnungen</span>,
+              zum Beispiel Klima- oder Luftwerte aus der nächstgelegenen Messstation. Diese Hinweise siehst du später
+              in den Ergebnis- und Detailansichten transparent ausgewiesen.
+            </p>
+          </div>
+
+          <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktuell am stärksten gewichtet</p>
+            <p class="mt-2 text-sm text-slate-800">
+              {{ rankingFocusText }}
+            </p>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 class="mb-4 text-lg font-semibold">Welche Werte dahinterstehen</h2>
           <div class="grid gap-4 md:grid-cols-2">
             <article
@@ -74,12 +102,16 @@
 
 <script setup lang="ts">
 import PreferenceForm from '~/components/PreferenceForm.vue'
+import { buildPreferenceQuery, parsePreferenceQuery, preferenceQueryEquals } from '~/composables/usePreferenceQuery'
 import { usePreferencesStore } from '~/stores/preferences'
 
 const { siteName, absoluteUrl } = useSiteSeo()
 const store = usePreferencesStore()
+const route = useRoute()
 const router = useRouter()
-const form = ref({ ...store.$state })
+const initialPreferences = parsePreferenceQuery(route.query, { ...store.$state })
+store.$patch(initialPreferences)
+const form = ref({ ...initialPreferences })
 
 const title = 'Finder'
 const description =
@@ -166,6 +198,37 @@ const effectiveWeights = computed(() => {
   }
 })
 
+const rankingFocusText = computed(() => {
+  const weighted = [
+    { label: 'Klima', weight: form.value.climate_weight },
+    { label: 'Luftqualität', weight: form.value.air_weight },
+    { label: 'Verkehrssicherheit', weight: form.value.safety_weight },
+    { label: 'Demografie/Familie', weight: form.value.demographics_weight },
+    { label: 'Alltagsnähe', weight: form.value.amenities_weight },
+    { label: 'Flächennutzung', weight: form.value.landuse_weight },
+    { label: 'ÖPNV', weight: form.value.oepnv_weight }
+  ].filter((entry) => entry.weight > 0)
+
+  if (!weighted.length) {
+    return 'Noch keine Kategorie gewichtet. Mit allen Gewichten auf 0 ergibt sich konsequent kein Profilscore.'
+  }
+
+  const maxWeight = Math.max(...weighted.map((entry) => entry.weight))
+  const leaders = weighted
+    .filter((entry) => entry.weight === maxWeight)
+    .map((entry) => entry.label)
+
+  if (leaders.length === 1) {
+    return `${leaders[0]} dominiert aktuell dein Suchprofil. Regionen mit hoher Ausprägung in dieser Kategorie steigen im Ranking deutlich.`
+  }
+
+  if (leaders.length === 2) {
+    return `${leaders[0]} und ${leaders[1]} dominieren aktuell dein Suchprofil. Das Ranking sucht deshalb nach Regionen, die beide Schwerpunkte zugleich gut abdecken.`
+  }
+
+  return 'Mehrere Kategorien sind aktuell gleich stark gewichtet. Das Ranking bleibt dadurch breiter und weniger auf einen einzelnen Schwerpunkt zugespitzt.'
+})
+
 const categoryDetails = [
   {
     key: 'climate',
@@ -246,14 +309,26 @@ const categoryDetails = [
 ]
 
 function submit() {
-  store.setWeight('climate_weight', form.value.climate_weight)
-  store.setWeight('air_weight', form.value.air_weight)
-  store.setWeight('safety_weight', form.value.safety_weight)
-  store.setWeight('demographics_weight', form.value.demographics_weight)
-  store.setWeight('amenities_weight', form.value.amenities_weight)
-  store.setWeight('landuse_weight', form.value.landuse_weight)
-  store.setWeight('oepnv_weight', form.value.oepnv_weight)
-  store.setStateCode(form.value.state_code)
-  router.push('/results')
+  store.$patch(form.value)
+  router.push({
+    path: '/results',
+    query: buildPreferenceQuery(form.value)
+  })
 }
+
+watch(
+  form,
+  async (value) => {
+    store.$patch(value)
+
+    if (preferenceQueryEquals(route.query, value)) {
+      return
+    }
+
+    await router.replace({
+      query: buildPreferenceQuery(value)
+    })
+  },
+  { deep: true }
+)
 </script>

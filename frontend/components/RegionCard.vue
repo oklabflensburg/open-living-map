@@ -99,6 +99,31 @@
         </div>
 
         <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Datenbasis und Aktualität</p>
+          <p class="mt-1 text-xs text-slate-600">
+            {{ freshnessText(item) }}
+          </p>
+          <p v-if="sourceSummary(item)" class="mt-1 text-xs text-slate-500">
+            Quellen: {{ sourceSummary(item) }}
+          </p>
+        </div>
+
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Qualitätshinweise</p>
+          <p
+            class="mt-1 text-xs"
+            :class="qualityWarningNotes(item).length ? 'text-amber-700' : 'text-emerald-700'"
+          >
+            {{ qualitySummaryText(item) }}
+          </p>
+          <ul v-if="qualityWarningNotes(item).length" class="mt-2 space-y-1 text-xs text-amber-800">
+            <li v-for="note in qualityWarningNotes(item)" :key="note">
+              {{ note }}
+            </li>
+          </ul>
+        </div>
+
+        <div>
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Rohdaten und Teil-Scores</p>
           <div class="mt-2 grid gap-2">
             <div
@@ -217,5 +242,53 @@ function coverageText(item: RecommendationItem) {
     .filter(([, coverage]) => coverage < 1)
     .map(([label, coverage]) => `${label} ${Math.round(coverage * 100)} %`)
     .join(' · ') || 'Alle Kategorien sind vollständig mit Daten abgedeckt.'
+}
+
+function freshnessText(item: RecommendationItem) {
+  const dates = item.indicators
+    .map((indicator) => indicator.updated_at)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.getTime()))
+
+  if (!dates.length) {
+    return 'Für diese Ergebniskarte liegt noch kein aggregierter Aktualitätszeitpunkt vor.'
+  }
+
+  const latest = new Date(Math.max(...dates.map((value) => value.getTime())))
+  return `Neuester berücksichtigter Datenstand: ${formatDate(latest)}.`
+}
+
+function sourceSummary(item: RecommendationItem) {
+  const sources = [...new Set(item.indicators.map((indicator) => indicator.source_name).filter(Boolean))]
+  return sources.join(', ')
+}
+
+function qualityWarningNotes(item: RecommendationItem) {
+  const grouped = new Map<string, string[]>()
+  for (const indicator of item.indicators) {
+    if (indicator.quality_flag === 'ohne besonderen Hinweis') {
+      continue
+    }
+    const current = grouped.get(indicator.quality_flag) || []
+    current.push(indicator.name)
+    grouped.set(indicator.quality_flag, current)
+  }
+
+  return [...grouped.entries()].map(([flag, indicators]) => `${flag}: ${indicators.join(', ')}.`)
+}
+
+function qualitySummaryText(item: RecommendationItem) {
+  return qualityWarningNotes(item).length
+    ? 'Für dieses Ergebnis gibt es Qualitäts- oder Proxy-Hinweise.'
+    : 'Keine besonderen Qualitätswarnungen für dieses Ergebnis.'
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(value)
 }
 </script>

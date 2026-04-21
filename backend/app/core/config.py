@@ -28,6 +28,7 @@ class Settings(BaseSettings):
         "https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/daily/kl"
     )
     dwd_max_stations: int = 0
+    dwd_recent_cache_max_age_hours: int = 12
     geofabrik_germany_pbf_url: str = "https://download.geofabrik.de/europe/germany-latest.osm.pbf"
     bkg_district_table: str = "public.vg25_krs"
     bkg_municipality_table: str = "public.vg25_gem"

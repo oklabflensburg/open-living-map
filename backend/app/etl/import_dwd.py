@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
+from sqlalchemy import text
 from sqlmodel import select
 
 from app.core.config import settings
@@ -15,6 +16,7 @@ from app.etl.common import (
     download_file,
     get_or_create_indicator,
     normalize,
+    tracked_etl_run,
     with_session,
 )
 from app.models.indicator import RegionIndicatorValue
@@ -22,19 +24,73 @@ from app.models.region import Region
 
 logger = logging.getLogger("etl.import_dwd")
 logging.basicConfig(level=logging.INFO)
+
+
+def _should_refresh_recent_file(path: Path) -> bool:
+    if not path.exists():
+        return True
+
+    max_age = timedelta(hours=settings.dwd_recent_cache_max_age_hours)
+    modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+    return datetime.now(UTC) - modified_at >= max_age
+
+
+def _download_recent_file(url: str, target: Path, *, timeout: int) -> Path:
+    return download_file(
+        url,
+        target,
+        timeout=timeout,
+        force=_should_refresh_recent_file(target),
+    )
+
+
 def _nearest_station_metrics(
     municipality_lat: float,
     municipality_lon: float,
-    station_metrics: list[tuple[float, float, tuple[float, float, float]]],
-) -> tuple[float, float, float] | None:
-    best_metrics: tuple[float, float, float] | None = None
+    station_metrics: list[tuple[str, str, float, float, tuple[float, float, float]]],
+) -> tuple[str, str, float, float, tuple[float, float, float]] | None:
+    best_match: tuple[str, str, float, float, tuple[float, float, float]] | None = None
     best_dist = float("inf")
-    for station_lat, station_lon, metrics in station_metrics:
+    for station_id, station_name, station_lat, station_lon, metrics in station_metrics:
         dist = (municipality_lat - station_lat) ** 2 + (municipality_lon - station_lon) ** 2
         if dist < best_dist:
             best_dist = dist
-            best_metrics = metrics
-    return best_metrics
+            best_match = (station_id, station_name, station_lat, station_lon, metrics)
+    return best_match
+
+
+def _write_region_climate_stations(
+    session,
+    *,
+    assignments: list[dict[str, object]],
+) -> None:
+    session.execute(text("DELETE FROM climate.region_climate_station"))
+    if assignments:
+        session.execute(
+            text(
+                """
+            INSERT INTO climate.region_climate_station (
+                region_ars,
+                indicator_key,
+                station_id,
+                station_name,
+                latitude,
+                longitude,
+                source_url
+            ) VALUES (
+                :region_ars,
+                :indicator_key,
+                :station_id,
+                :station_name,
+                :latitude,
+                :longitude,
+                :source_url
+            )
+            """
+            ),
+            assignments,
+        )
+    session.commit()
 
 
 def _batch_write_indicator_values(
@@ -160,123 +216,154 @@ def main() -> None:
     station_file = settings.raw_data_path / "dwd" / "KL_Tageswerte_Beschreibung_Stationen.txt"
     station_url = f"{settings.dwd_base_url}/recent/KL_Tageswerte_Beschreibung_Stationen.txt"
 
-    try:
-        download_file(station_url, station_file, timeout=120)
-    except Exception as exc:
-        logger.warning("DWD Stationsdatei nicht ladbar, Import wird uebersprungen: %s", exc)
-        return
-
-    stations_df = _parse_station_file(station_file)
-    if stations_df.empty:
-        logger.warning("DWD Stationsdatei konnte nicht geparst werden. Kein Write.")
-        return
-
-    active_ids = set(_recent_station_ids())
-    stations_df = stations_df[stations_df["station_id"].isin(active_ids)]
-    if settings.dwd_max_stations > 0:
-        stations_df = stations_df.head(settings.dwd_max_stations)
-    if stations_df.empty:
-        logger.warning("Keine aktiven DWD-Stationen gefunden. Kein Write.")
-        return
-
-    with with_session() as session:
-        municipalities = list(session.exec(select(Region).where(Region.level == "gemeinde")))
-        municipality_coords = [
-            (municipality.id, float(municipality.centroid_lat), float(municipality.centroid_lon))
-            for municipality in municipalities
-            if municipality.centroid_lat is not None and municipality.centroid_lon is not None
-        ]
-        if not municipality_coords:
-            logger.warning("Keine Gemeinde-Zentroide verfuegbar. Kein Write.")
+    with tracked_etl_run(
+        job_name="import_dwd",
+        sources=[
+            {"source_name": "DWD stations", "source_url": station_url},
+            {"source_name": "DWD daily climate", "source_url": settings.dwd_base_url},
+        ],
+    ) as run:
+        try:
+            _download_recent_file(station_url, station_file, timeout=120)
+        except Exception as exc:
+            logger.warning("DWD Stationsdatei nicht ladbar, Import wird uebersprungen: %s", exc)
             return
 
-        station_metrics: list[tuple[float, float, tuple[float, float, float]]] = []
-
-        for _, station in stations_df.iterrows():
-            station_id = str(station["station_id"])
-            lat = float(station["lat"])
-            lon = float(station["lon"])
-
-            zip_name = f"tageswerte_KL_{station_id}_akt.zip"
-            target = settings.raw_data_path / "dwd" / "recent" / zip_name
-            url = f"{settings.dwd_base_url}/recent/{zip_name}"
-            try:
-                download_file(url, target, timeout=120)
-            except Exception:
-                continue
-
-            station_data = _read_station_zip(target)
-            metrics = _station_metrics(station_data)
-            if metrics is None:
-                continue
-
-            station_metrics.append((lat, lon, metrics))
-
-        if not station_metrics:
-            logger.warning("Keine verwertbaren DWD-Stationen mit Metriken gefunden. Kein Write.")
+        stations_df = _parse_station_file(station_file)
+        if stations_df.empty:
+            logger.warning("DWD Stationsdatei konnte nicht geparst werden. Kein Write.")
             return
 
-        per_municipality: dict[int, dict[str, list[float]]] = {}
-        for municipality_id, municipality_lat, municipality_lon in municipality_coords:
-            metrics = _nearest_station_metrics(municipality_lat, municipality_lon, station_metrics)
-            if metrics is None:
-                continue
-            heat_days, summer_days, precipitation_proxy = metrics
-            per_municipality[municipality_id] = {
-                "heat_days": [heat_days],
-                "summer_days": [summer_days],
-                "precipitation_proxy": [precipitation_proxy],
-            }
+        active_ids = set(_recent_station_ids())
+        stations_df = stations_df[stations_df["station_id"].isin(active_ids)]
+        if settings.dwd_max_stations > 0:
+            stations_df = stations_df.head(settings.dwd_max_stations)
+        if stations_df.empty:
+            logger.warning("Keine aktiven DWD-Stationen gefunden. Kein Write.")
+            return
 
-        indicator_defs = [
-            ("heat_days", "Hitzetage", "count", "lower_is_better"),
-            ("summer_days", "Sommertage", "count", "higher_is_better"),
-            ("precipitation_proxy", "Niederschlag", "mm", "higher_is_better"),
-        ]
-
-        for key, name, unit, direction in indicator_defs:
-            values = [
-                (municipality_id, float(sum(vals[key]) / len(vals[key])))
-                for municipality_id, vals in per_municipality.items()
-                if vals[key]
+        with with_session() as session:
+            municipalities = list(session.exec(select(Region).where(Region.level == "gemeinde")))
+            municipality_by_id = {municipality.id: municipality for municipality in municipalities}
+            municipality_coords = [
+                (municipality.id, float(municipality.centroid_lat), float(municipality.centroid_lon))
+                for municipality in municipalities
+                if municipality.centroid_lat is not None and municipality.centroid_lon is not None
             ]
-            if not values:
-                logger.warning("DWD-Indikator %s ohne verwertbare Werte, uebersprungen.", key)
-                continue
+            if not municipality_coords:
+                logger.warning("Keine Gemeinde-Zentroide verfuegbar. Kein Write.")
+                return
 
-            indicator = get_or_create_indicator(
-                session,
-                key=key,
-                name=name,
-                category="climate",
-                unit=unit,
-                direction=direction,
-                normalization_mode="robust_percentile",
-                source_name="DWD CDC Daily KL",
-                source_url="https://opendata.dwd.de/",
-                methodology=(
-                    "Stationsdaten (aktuell) werden je Station ausgewertet und ueber die naechste "
-                    "DWD-Station jeder Gemeindezentroid-Zuordnung auf AGS-Ebene zugewiesen."
-                ),
-            )
-            clear_indicator_values(
-                session,
-                indicator_id=indicator.id,
-                period=settings.default_score_period,
-            )
+            station_metrics: list[tuple[str, str, float, float, tuple[float, float, float]]] = []
 
-            raw_values = [raw for _, raw in values]
-            normalized_values = normalize(raw_values, direction, mode="robust_percentile")
-            _batch_write_indicator_values(
-                session,
-                indicator_id=indicator.id,
-                period=settings.default_score_period,
-                values=values,
-                normalized_values=normalized_values,
-                quality_flag="nearest_station_proxy",
-            )
+            for _, station in stations_df.iterrows():
+                station_id = str(station["station_id"])
+                station_name = str(station.get("station_name") or f"Station {station_id}").strip()
+                lat = float(station["lat"])
+                lon = float(station["lon"])
 
-        session.commit()
+                zip_name = f"tageswerte_KL_{station_id}_akt.zip"
+                target = settings.raw_data_path / "dwd" / "recent" / zip_name
+                url = f"{settings.dwd_base_url}/recent/{zip_name}"
+                try:
+                    _download_recent_file(url, target, timeout=120)
+                except Exception:
+                    continue
+
+                station_data = _read_station_zip(target)
+                metrics = _station_metrics(station_data)
+                if metrics is None:
+                    continue
+
+                station_metrics.append((station_id, station_name, lat, lon, metrics))
+
+            if not station_metrics:
+                logger.warning("Keine verwertbaren DWD-Stationen mit Metriken gefunden. Kein Write.")
+                return
+
+            per_municipality: dict[int, dict[str, list[float]]] = {}
+            climate_station_assignments: list[dict[str, object]] = []
+            for municipality_id, municipality_lat, municipality_lon in municipality_coords:
+                match = _nearest_station_metrics(municipality_lat, municipality_lon, station_metrics)
+                if match is None:
+                    continue
+                station_id, station_name, station_lat, station_lon, metrics = match
+                heat_days, summer_days, precipitation_proxy = metrics
+                per_municipality[municipality_id] = {
+                    "heat_days": [heat_days],
+                    "summer_days": [summer_days],
+                    "precipitation_proxy": [precipitation_proxy],
+                }
+                region = municipality_by_id.get(municipality_id)
+                if region is None:
+                    continue
+                for indicator_key in ("heat_days", "summer_days", "precipitation_proxy"):
+                    climate_station_assignments.append(
+                        {
+                            "region_ars": region.ars,
+                            "indicator_key": indicator_key,
+                            "station_id": station_id,
+                            "station_name": station_name,
+                            "latitude": station_lat,
+                            "longitude": station_lon,
+                            "source_url": "https://opendata.dwd.de/",
+                        }
+                    )
+
+            indicator_defs = [
+                ("heat_days", "Hitzetage", "count", "lower_is_better"),
+                ("summer_days", "Sommertage", "count", "higher_is_better"),
+                ("precipitation_proxy", "Niederschlag", "mm", "higher_is_better"),
+            ]
+
+            for key, name, unit, direction in indicator_defs:
+                values = [
+                    (municipality_id, float(sum(vals[key]) / len(vals[key])))
+                    for municipality_id, vals in per_municipality.items()
+                    if vals[key]
+                ]
+                if not values:
+                    logger.warning("DWD-Indikator %s ohne verwertbare Werte, uebersprungen.", key)
+                    continue
+
+                indicator = get_or_create_indicator(
+                    session,
+                    key=key,
+                    name=name,
+                    category="climate",
+                    unit=unit,
+                    direction=direction,
+                    normalization_mode="robust_percentile",
+                    source_name="DWD CDC Daily KL",
+                    source_url="https://opendata.dwd.de/",
+                    methodology=(
+                        "Stationsdaten (aktuell) werden je Station ausgewertet und ueber die naechste "
+                        "DWD-Station jeder Gemeindezentroid-Zuordnung auf AGS-Ebene zugewiesen."
+                    ),
+                )
+                clear_indicator_values(
+                    session,
+                    indicator_id=indicator.id,
+                    period=settings.default_score_period,
+                )
+
+                raw_values = [raw for _, raw in values]
+                normalized_values = normalize(raw_values, direction, mode="robust_percentile")
+                _batch_write_indicator_values(
+                    session,
+                    indicator_id=indicator.id,
+                    period=settings.default_score_period,
+                    values=values,
+                    normalized_values=normalized_values,
+                    quality_flag="nearest_station_proxy",
+                )
+
+            _write_region_climate_stations(
+                session,
+                assignments=climate_station_assignments,
+            )
+            session.commit()
+            run.set_rows_written(len(per_municipality))
 
         logger.info("DWD-Import abgeschlossen (%s Gemeinden mit DWD-Zuordnung)", len(per_municipality))
 

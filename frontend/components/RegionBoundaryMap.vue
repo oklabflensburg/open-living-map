@@ -31,6 +31,16 @@ type AirStationMapInfo = {
   measures_url: string
 }
 
+type ClimateStationMapInfo = {
+  indicator_key: string
+  label: string
+  station_id: string
+  station_name: string
+  latitude: number | null
+  longitude: number | null
+  source_url: string | null
+}
+
 const props = defineProps<{
   geometry: Record<string, unknown> | null
   name: string
@@ -40,6 +50,8 @@ const props = defineProps<{
   selectedOverlayLabel?: string | null
   airStations?: AirStationMapInfo[]
   selectedAirStationId?: string | null
+  climateStations?: ClimateStationMapInfo[]
+  selectedClimateStationId?: string | null
 }>()
 
 const container = ref<HTMLElement | null>(null)
@@ -50,6 +62,8 @@ let boundaryLayer: import('leaflet').GeoJSON | null = null
 let poiLayer: import('leaflet').GeoJSON | null = null
 let airStationLayer: import('leaflet').LayerGroup | null = null
 let airStationMarkers = new Map<string, import('leaflet').CircleMarker>()
+let climateStationLayer: import('leaflet').LayerGroup | null = null
+let climateStationMarkers = new Map<string, import('leaflet').CircleMarker>()
 
 onMounted(async () => {
   LLeaflet = await import('leaflet')
@@ -71,6 +85,7 @@ onMounted(async () => {
 
   renderBoundary()
   renderAirStations()
+  renderClimateStations()
   renderPois()
 })
 
@@ -181,12 +196,104 @@ function renderAirStations() {
   focusSelectedAirStation()
 }
 
+function renderClimateStations() {
+  if (!LLeaflet || !map) {
+    return
+  }
+
+  climateStationLayer?.remove()
+  climateStationLayer = null
+  climateStationMarkers = new Map()
+
+  const stations = (props.climateStations || []).filter(
+    (station) => station.latitude != null && station.longitude != null
+  )
+  if (!stations.length) {
+    return
+  }
+
+  const grouped = new Map<
+    string,
+    {
+      station_name: string
+      station_id: string
+      latitude: number
+      longitude: number
+      source_url: string | null
+      labels: string[]
+    }
+  >()
+
+  for (const station of stations) {
+    const key = station.station_id
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.labels.push(station.label)
+      continue
+    }
+    grouped.set(key, {
+      station_name: station.station_name,
+      station_id: station.station_id,
+      latitude: station.latitude!,
+      longitude: station.longitude!,
+      source_url: station.source_url,
+      labels: [station.label]
+    })
+  }
+
+  climateStationLayer = LLeaflet.layerGroup(
+    Array.from(grouped.values()).map((station) => {
+      const marker = LLeaflet!.circleMarker([station.latitude, station.longitude], {
+        radius: 7,
+        color: '#b45309',
+        weight: 2,
+        fillColor: '#f59e0b',
+        fillOpacity: 0.9
+      })
+
+      const labels = station.labels.join(', ')
+      const popupHtml = [
+        `<strong>${station.station_name}</strong>`,
+        labels ? `<br>Klimadaten: ${labels}` : '',
+        `<br>Koordinaten: ${station.latitude.toFixed(5)}, ${station.longitude.toFixed(5)}`,
+        station.source_url
+          ? `<br><a href="${station.source_url}" target="_blank" rel="noreferrer">DWD-Quelle öffnen</a>`
+          : ''
+      ].join('')
+
+      marker.bindPopup(popupHtml)
+      climateStationMarkers.set(station.station_id, marker)
+      return marker
+    })
+  )
+
+  climateStationLayer.addTo(map)
+  focusSelectedClimateStation()
+}
+
 function focusSelectedAirStation() {
   if (!map || !props.selectedAirStationId) {
     return
   }
 
   const marker = airStationMarkers.get(props.selectedAirStationId)
+  if (!marker) {
+    return
+  }
+
+  const target = marker.getLatLng()
+  map.flyTo(target, Math.max(map.getZoom(), 12), {
+    duration: 0.6
+  })
+  marker.openPopup()
+}
+
+function focusSelectedClimateStation() {
+  if (!map || !props.selectedClimateStationId) {
+    return
+  }
+
+  const marker = climateStationMarkers.get(props.selectedClimateStationId)
   if (!marker) {
     return
   }
@@ -253,8 +360,19 @@ watch(
 )
 
 watch(
+  () => props.climateStations,
+  () => renderClimateStations(),
+  { deep: true }
+)
+
+watch(
   () => props.selectedAirStationId,
   () => focusSelectedAirStation()
+)
+
+watch(
+  () => props.selectedClimateStationId,
+  () => focusSelectedClimateStation()
 )
 
 onBeforeUnmount(() => {

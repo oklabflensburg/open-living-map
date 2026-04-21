@@ -2,13 +2,32 @@ from sqlmodel import Session
 
 from app.repositories.region_repository import ACCIDENT_CATEGORY_LABELS, RegionRepository
 from app.schemas.recommendation import RecommendationInput
-from app.schemas.region import AccidentStat, AirStationInfo, AmenityStat, LandUseStat, RegionBase, RegionDetailResponse
+from app.schemas.region import (
+    AccidentStat,
+    AirStationInfo,
+    AmenityStat,
+    CategoryFreshness,
+    ClimateStationInfo,
+    CategoryQualitySummary,
+    LandUseStat,
+    RegionBase,
+    RegionDetailResponse,
+    ScoreCoverage,
+    ScoreFreshness,
+    ScoreQualitySummary,
+)
 from app.services.scoring import ScoringService
 
 AIR_INDICATOR_LABELS = {
     "no2": "NO2",
     "pm10": "PM10",
     "pm25": "PM2.5",
+}
+
+CLIMATE_INDICATOR_LABELS = {
+    "heat_days": "Hitzetage",
+    "summer_days": "Sommertage",
+    "precipitation_proxy": "Niederschlag",
 }
 
 
@@ -40,6 +59,11 @@ class RegionService:
             "amenities": snapshot.coverage_amenities if snapshot else 0.0,
             "landuse": snapshot.coverage_landuse if snapshot else 0.0,
             "oepnv": snapshot.coverage_oepnv if snapshot else 0.0,
+        }
+        freshness_by_category = self.repository.get_category_freshness(region.id)
+        freshness = {
+            category: CategoryFreshness(**freshness_by_category.get(category, {}))
+            for category in category_scores
         }
         base_preferences = RecommendationInput(
             climate_weight=1,
@@ -82,6 +106,11 @@ class RegionService:
         ]
         indicator_rows = base_scoring.repository.list_indicator_values(region.id)
         indicator_details = base_scoring._build_indicator_details(indicator_rows)
+        quality_by_category = base_scoring.build_category_quality_summary(indicator_rows)
+        quality = {
+            category: CategoryQualitySummary(**quality_by_category.get(category, {}))
+            for category in category_scores
+        }
         indicator_values = {indicator.key: indicator for indicator in indicator_details}
         air_stations = [
             AirStationInfo(
@@ -98,6 +127,20 @@ class RegionService:
             )
             for indicator_key, station_id, station_code, station_name, latitude, longitude, station_page_url, measures_url
             in self.repository.list_air_stations(region.ars)
+        ]
+        climate_stations = [
+            ClimateStationInfo(
+                indicator_key=indicator_key,
+                label=CLIMATE_INDICATOR_LABELS.get(indicator_key, indicator_key),
+                raw_value=indicator_values.get(indicator_key).raw_value if indicator_values.get(indicator_key) else None,
+                station_id=station_id,
+                station_name=station_name,
+                latitude=latitude,
+                longitude=longitude,
+                source_url=source_url,
+            )
+            for indicator_key, station_id, station_name, latitude, longitude, source_url
+            in self.repository.list_climate_stations(region.ars)
         ]
         land_use_stat_row = self.repository.get_land_use_stat(region.ars)
         land_use_stat = (
@@ -126,11 +169,15 @@ class RegionService:
         return RegionDetailResponse(
             region=RegionBase.model_validate(region),
             scores=scores,
+            coverage=ScoreCoverage(**coverage),
+            freshness=ScoreFreshness(**freshness),
+            quality=ScoreQualitySummary(**quality),
             highlights=highlights,
             source_links=source_links,
             amenity_stats=amenity_stats,
             accident_stats=accident_stats,
             air_stations=air_stations,
+            climate_stations=climate_stations,
             land_use_stat=land_use_stat,
             geometry=geometry,
             score_formula=score_formula,

@@ -8,17 +8,19 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.db import engine
+from app.core.logging import configure_logging
 from app.etl.common import (
     clear_indicator_values,
     download_file,
     get_or_create_indicator,
     normalize,
+    tracked_etl_run,
     upsert_region_indicator_value,
     with_session,
 )
 
+configure_logging()
 logger = logging.getLogger("etl.import_osm")
-logging.basicConfig(level=logging.INFO)
 
 CATEGORY_MAPPING = {
     "pharmacy": [("amenity", "pharmacy")],
@@ -509,10 +511,17 @@ def build_amenities_indicator() -> None:
 
 def main() -> None:
     logger.info("OSM-Import gestartet")
-    osm_path = maybe_download_geofabrik()
-    maybe_run_osm2pgsql(osm_path)
-    build_amenities_indicator()
-    logger.info("OSM-Import abgeschlossen")
+    with tracked_etl_run(
+        job_name="import_osm",
+        sources=[
+            {"source_name": "Geofabrik Germany PBF", "source_url": settings.geofabrik_germany_pbf_url},
+        ],
+    ) as run:
+        osm_path = maybe_download_geofabrik()
+        maybe_run_osm2pgsql(osm_path)
+        build_amenities_indicator()
+        run.set_rows_written(0)
+        logger.info("OSM-Import abgeschlossen")
 
 
 if __name__ == "__main__":

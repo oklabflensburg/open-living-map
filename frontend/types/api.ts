@@ -55,6 +55,9 @@ export interface RecommendationItem {
   coverage_amenities: number
   coverage_landuse: number
   coverage_oepnv: number
+  trust_updated_at: string | null
+  trust_sources: string[]
+  trust_quality_notes: string[]
   reason: string
   score_formula: string
   calculation_details: string[]
@@ -73,6 +76,8 @@ export interface RecommendationIndicatorDetail {
   raw_value: number
   normalized_value: number
   quality_flag: string
+  source_name: string
+  updated_at: string | null
   text: string
 }
 
@@ -102,6 +107,17 @@ export interface AirStationInfo {
   measures_url: string
 }
 
+export interface ClimateStationInfo {
+  indicator_key: string
+  label: string
+  raw_value: number | null
+  station_id: string
+  station_name: string
+  latitude: number | null
+  longitude: number | null
+  source_url: string | null
+}
+
 export interface LandUseStat {
   year: number
   forest_share_pct: number | null
@@ -109,6 +125,46 @@ export interface LandUseStat {
   agriculture_share_pct: number | null
   transport_share_pct: number | null
   settlement_transport_sqm_per_capita: number | null
+}
+
+export interface ScoreCoverage {
+  climate: number
+  air: number
+  safety: number
+  demographics: number
+  amenities: number
+  landuse: number
+  oepnv: number
+}
+
+export interface CategoryFreshness {
+  updated_at: string | null
+  sources: string[]
+}
+
+export interface ScoreFreshness {
+  climate: CategoryFreshness
+  air: CategoryFreshness
+  safety: CategoryFreshness
+  demographics: CategoryFreshness
+  amenities: CategoryFreshness
+  landuse: CategoryFreshness
+  oepnv: CategoryFreshness
+}
+
+export interface CategoryQualitySummary {
+  status: string
+  notes: string[]
+}
+
+export interface ScoreQualitySummary {
+  climate: CategoryQualitySummary
+  air: CategoryQualitySummary
+  safety: CategoryQualitySummary
+  demographics: CategoryQualitySummary
+  amenities: CategoryQualitySummary
+  landuse: CategoryQualitySummary
+  oepnv: CategoryQualitySummary
 }
 
 export interface GeoJsonFeatureCollection {
@@ -123,11 +179,15 @@ export interface GeoJsonFeatureCollection {
 export interface RegionDetailResponse {
   region: Region
   scores: Record<string, number>
+  coverage: ScoreCoverage
+  freshness: ScoreFreshness
+  quality: ScoreQualitySummary
   highlights: string[]
   source_links: string[]
   amenity_stats: AmenityStat[]
   accident_stats: AccidentStat[]
   air_stations: AirStationInfo[]
+  climate_stations: ClimateStationInfo[]
   land_use_stat: LandUseStat | null
   geometry: Record<string, unknown> | null
   score_formula: string

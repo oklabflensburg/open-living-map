@@ -12,6 +12,7 @@ from app.etl.common import (
     clear_indicator_values,
     get_or_create_indicator,
     normalize,
+    tracked_etl_run,
     with_session,
 )
 from app.models.indicator import RegionIndicatorValue
@@ -292,132 +293,141 @@ def _batch_write_indicator_values(
 
 def main() -> None:
     logger.info("UBA-Import gestartet")
-    with with_session() as session:
-        municipalities = list(session.exec(select(Region).where(Region.level == "gemeinde")))
-        municipality_coords = [
-            (municipality.id, municipality.ars, float(municipality.centroid_lat), float(municipality.centroid_lon))
-            for municipality in municipalities
-            if municipality.centroid_lat is not None and municipality.centroid_lon is not None
-        ]
-        if not municipality_coords:
-            logger.warning("Keine Gemeinde-Zentroide verfuegbar. UBA-Import wird uebersprungen.")
-            return
+    with tracked_etl_run(
+        job_name="import_uba",
+        sources=[
+            {"source_name": "UBA air data API", "source_url": f"{UBA_BASE}/doc"},
+            {"source_name": "Env-it station pages", "source_url": ENV_IT_STATION_BASE},
+        ],
+    ) as run:
+        with with_session() as session:
+            municipalities = list(session.exec(select(Region).where(Region.level == "gemeinde")))
+            municipality_coords = [
+                (municipality.id, municipality.ars, float(municipality.centroid_lat), float(municipality.centroid_lon))
+                for municipality in municipalities
+                if municipality.centroid_lat is not None and municipality.centroid_lon is not None
+            ]
+            if not municipality_coords:
+                logger.warning("Keine Gemeinde-Zentroide verfuegbar. UBA-Import wird uebersprungen.")
+                return
 
-        try:
-            stations = _fetch_stations()
-        except Exception as exc:
-            logger.warning("UBA Stationsabruf fehlgeschlagen: %s", exc)
-            return
-
-        station_positions: dict[str, tuple[float, float]] = {}
-        station_metadata: dict[str, dict[str, object]] = {}
-        for station_id, row in stations.items():
-            if not isinstance(row, list) or len(row) < 9:
-                continue
             try:
-                lon = float(row[7])
-                lat = float(row[8])
-            except (TypeError, ValueError):
-                continue
-            station_positions[station_id] = (lat, lon)
-            station_code = _first_station_code(row)
-            station_metadata[station_id] = {
-                "station_id": station_id,
-                "station_code": station_code,
-                "station_name": _guess_station_name(station_id, row),
-                "latitude": lat,
-                "longitude": lon,
-                "station_page_url": _build_station_page_url(station_code),
-                "measures_url": _build_station_measures_url(station_id),
-            }
+                stations = _fetch_stations()
+            except Exception as exc:
+                logger.warning("UBA Stationsabruf fehlgeschlagen: %s", exc)
+                return
 
-        if not station_positions:
-            logger.warning("Keine verwertbaren UBA-Stationen gefunden. Kein Write.")
-            return
+            station_positions: dict[str, tuple[float, float]] = {}
+            station_metadata: dict[str, dict[str, object]] = {}
+            for station_id, row in stations.items():
+                if not isinstance(row, list) or len(row) < 9:
+                    continue
+                try:
+                    lon = float(row[7])
+                    lat = float(row[8])
+                except (TypeError, ValueError):
+                    continue
+                station_positions[station_id] = (lat, lon)
+                station_code = _first_station_code(row)
+                station_metadata[station_id] = {
+                    "station_id": station_id,
+                    "station_code": station_code,
+                    "station_name": _guess_station_name(station_id, row),
+                    "latitude": lat,
+                    "longitude": lon,
+                    "station_page_url": _build_station_page_url(station_code),
+                    "measures_url": _build_station_measures_url(station_id),
+                }
+
+            if not station_positions:
+                logger.warning("Keine verwertbaren UBA-Stationen gefunden. Kein Write.")
+                return
 
         # component ids laut UBA components/json
-        defs = [
-            ("no2", "NO2", 5),
-            ("pm10", "PM10", 1),
-            ("pm25", "PM2.5", 9),
-        ]
-
-        for key, name, component_id in defs:
-            measures_data = _fetch_measures_with_fallback(component_id)
-            if not measures_data:
-                logger.warning("UBA Measures fuer %s fehlgeschlagen.", key)
-                continue
-
-            station_means = _mean_station_values(measures_data)
-            positioned_station_values = [
-                (station_id, station_positions[station_id][0], station_positions[station_id][1], value)
-                for station_id, value in station_means.items()
-                if station_id in station_positions
-            ]
-            if not positioned_station_values:
-                logger.warning("UBA-Indikator %s ohne Stationen mit Koordinaten.", key)
-                continue
-
-            values = [
-                (municipality_id, nearest_value)
-                for municipality_id, _, municipality_lat, municipality_lon in municipality_coords
-                for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
-                if nearest is not None
-                for _, nearest_value in [nearest]
-            ]
-            if not values:
-                logger.warning("UBA-Indikator %s ohne verwertbare Werte.", key)
-                continue
-
-            station_assignments = [
-                (region_ars, station_id)
-                for _, region_ars, municipality_lat, municipality_lon in municipality_coords
-                for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
-                if nearest is not None
-                for station_id, _ in [nearest]
+            defs = [
+                ("no2", "NO2", 5),
+                ("pm10", "PM10", 1),
+                ("pm25", "PM2.5", 9),
             ]
 
-            indicator = get_or_create_indicator(
-                session,
-                key=key,
-                name=name,
-                category="air",
-                unit="ug/m3",
-                direction="lower_is_better",
-                normalization_mode="robust_percentile",
-                source_name="Umweltbundesamt Luftdaten API v4",
-                source_url="https://luftdaten.umweltbundesamt.de/api/air-data/v4/doc",
-                methodology=(
-                    "Messwerte der letzten Tage je Station, dann Zuordnung jeder Gemeinde "
-                    "zur naechsten UBA-Messstation auf AGS-Ebene."
-                ),
-            )
-            clear_indicator_values(
-                session,
-                indicator_id=indicator.id,
-                period=settings.default_score_period,
-            )
+            rows_written = 0
+            for key, name, component_id in defs:
+                measures_data = _fetch_measures_with_fallback(component_id)
+                if not measures_data:
+                    logger.warning("UBA Measures fuer %s fehlgeschlagen.", key)
+                    continue
 
-            raw_values = [raw for _, raw in values]
-            normalized_values = normalize(raw_values, "lower_is_better", mode="robust_percentile")
-            _batch_write_indicator_values(
-                session,
-                indicator_id=indicator.id,
-                period=settings.default_score_period,
-                values=values,
-                normalized_values=normalized_values,
-                quality_flag="nearest_station_proxy",
-            )
-            _write_region_air_stations(
-                session,
-                indicator_key=key,
-                assignments=station_assignments,
-                station_metadata=station_metadata,
-            )
+                station_means = _mean_station_values(measures_data)
+                positioned_station_values = [
+                    (station_id, station_positions[station_id][0], station_positions[station_id][1], value)
+                    for station_id, value in station_means.items()
+                    if station_id in station_positions
+                ]
+                if not positioned_station_values:
+                    logger.warning("UBA-Indikator %s ohne Stationen mit Koordinaten.", key)
+                    continue
 
-            logger.info("UBA-Indikator %s geschrieben: %s Gemeinden", key, len(values))
+                values = [
+                    (municipality_id, nearest_value)
+                    for municipality_id, _, municipality_lat, municipality_lon in municipality_coords
+                    for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
+                    if nearest is not None
+                    for _, nearest_value in [nearest]
+                ]
+                if not values:
+                    logger.warning("UBA-Indikator %s ohne verwertbare Werte.", key)
+                    continue
 
-        session.commit()
+                station_assignments = [
+                    (region_ars, station_id)
+                    for _, region_ars, municipality_lat, municipality_lon in municipality_coords
+                    for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
+                    if nearest is not None
+                    for station_id, _ in [nearest]
+                ]
+
+                indicator = get_or_create_indicator(
+                    session,
+                    key=key,
+                    name=name,
+                    category="air",
+                    unit="ug/m3",
+                    direction="lower_is_better",
+                    normalization_mode="robust_percentile",
+                    source_name="Umweltbundesamt Luftdaten API v4",
+                    source_url="https://luftdaten.umweltbundesamt.de/api/air-data/v4/doc",
+                    methodology=(
+                        "Messwerte der letzten Tage je Station, dann Zuordnung jeder Gemeinde "
+                        "zur naechsten UBA-Messstation auf AGS-Ebene."
+                    ),
+                )
+                clear_indicator_values(
+                    session,
+                    indicator_id=indicator.id,
+                    period=settings.default_score_period,
+                )
+
+                raw_values = [raw for _, raw in values]
+                normalized_values = normalize(raw_values, "lower_is_better", mode="robust_percentile")
+                _batch_write_indicator_values(
+                    session,
+                    indicator_id=indicator.id,
+                    period=settings.default_score_period,
+                    values=values,
+                    normalized_values=normalized_values,
+                    quality_flag="nearest_station_proxy",
+                )
+                _write_region_air_stations(
+                    session,
+                    indicator_key=key,
+                    assignments=station_assignments,
+                    station_metadata=station_metadata,
+                )
+                rows_written += len(values)
+                logger.info("UBA-Indikator %s geschrieben: %s Gemeinden", key, len(values))
+
+            session.commit()
+            run.set_rows_written(rows_written)
 
     logger.info("UBA-Import abgeschlossen")
 

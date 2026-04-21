@@ -14,16 +14,18 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.engine import make_url
 
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.etl.common import (
     clear_indicator_values,
     get_or_create_indicator,
     normalize,
+    tracked_etl_run,
     upsert_region_indicator_value,
     with_session,
 )
 
+configure_logging()
 logger = logging.getLogger("etl.import_oepnv")
-logging.basicConfig(level=logging.INFO)
 
 SOURCE_URL = "https://www.opendata-oepnv.de/ht/de/datensaetze"
 BIN_SIZE_MINUTES = 15
@@ -962,133 +964,138 @@ def _write_indicator(
 
 def main() -> None:
     logger.info("OEPNV-Import gestartet")
-    if not _acquire_import_lock():
-        logger.warning("OEPNV-Import bereits aktiv. Neuer Lauf wird beendet statt auf DB-Locks zu warten.")
-        return
-
-    urls = _parse_gtfs_urls()
-    if not urls:
-        logger.warning("Keine OEPNV_GTFS_URLS gesetzt. Import wird uebersprungen.")
-        _release_import_lock()
-        return
-
-    try:
-        municipality_signature = _prepare_staging()
-
-        loaded_feeds = 0
-        active_stage_keys: list[str] = []
-        for idx, url in enumerate(urls):
-            feed_key = f"f{idx}"
-            schema_base = f"oepnv_gtfs_f{idx}"
-
-            try:
-                gtfs_path = _download_gtfs(url)
-                raw_imported = False
-                registry_row = _get_feed_registry(feed_key)
-                active_schema_name = registry_row[0] if registry_row else schema_base
-
-                if _should_import_gtfs(feed_key, gtfs_path):
-                    import_schema_name = f"{schema_base}_{int(time.time())}"
-                    _import_gtfs_to_postgres(gtfs_path, import_schema_name)
-                    _store_feed_registry(feed_key, gtfs_path, import_schema_name)
-                    active_schema_name = import_schema_name
-                    raw_imported = True
-                else:
-                    logger.info("GTFS-Rohimport uebersprungen, Feed unveraendert: %s", gtfs_path)
-
-                if raw_imported or _should_rebuild_staging(feed_key, municipality_signature):
-                    active_stage_key = f"{feed_key}:{int(time.time())}"
-                    logger.info("Starte GTFS-Staging fuer %s mit stage key %s", feed_key, active_stage_key)
-                    _load_feed_into_staging(active_stage_key, active_schema_name)
-                    _store_stage_registry(feed_key, municipality_signature, active_stage_key)
-                else:
-                    logger.info("GTFS-Staging uebersprungen, Feed und Gemeinden unveraendert: %s", feed_key)
-                    stage_registry = _get_stage_registry(feed_key)
-                    if stage_registry and stage_registry[1]:
-                        active_stage_key = stage_registry[1]
-                    else:
-                        raise RuntimeError(f"Kein aktiver GTFS-Stage-Key fuer {feed_key} vorhanden")
-                active_stage_keys.append(active_stage_key)
-                loaded_feeds += 1
-            except Exception as exc:
-                logger.warning("GTFS-Verarbeitung fehlgeschlagen (%s): %s", url, exc)
-                continue
-
-        if loaded_feeds == 0:
-            logger.warning("Kein GTFS-Feed erfolgreich verarbeitet. Kein Write.")
+    with tracked_etl_run(
+        job_name="import_oepnv",
+        sources=[{"source_name": "OpenData ÖPNV", "source_url": SOURCE_URL}],
+    ) as run:
+        if not _acquire_import_lock():
+            logger.warning("OEPNV-Import bereits aktiv. Neuer Lauf wird beendet statt auf DB-Locks zu warten.")
             return
 
-        stop_density_values, departures_values, departures_total_values, regularity_values = _compute_metrics(active_stage_keys)
+        urls = _parse_gtfs_urls()
+        if not urls:
+            logger.warning("Keine OEPNV_GTFS_URLS gesetzt. Import wird uebersprungen.")
+            _release_import_lock()
+            return
 
-        _write_indicator(
-            key="oepnv_stop_density",
-            name="OEPNV-Haltestellendichte",
-            category="oepnv",
-            unit="stops_per_10k",
-            direction="higher_is_better",
-            normalization_mode="log",
-            methodology=(
-                "GTFS-CSV-Dateien werden direkt nach PostgreSQL geladen. Haltestellen werden der naechsten "
-                "Gemeindegeometrie via PostGIS zugeordnet, mit Zentroid-Fallback ausserhalb der Polygonflaechen, "
-                "ueber Koordinaten dedupliziert und je 10.000 Einwohner normiert."
-            ),
-            values=stop_density_values,
-        )
+        try:
+            municipality_signature = _prepare_staging()
 
-        _write_indicator(
-            key="oepnv_departures_per_10k",
-            name="OEPNV-Abfahrtsdichte",
-            category="oepnv",
-            unit="departures_per_10k",
-            direction="higher_is_better",
-            normalization_mode="log",
-            methodology=(
-                "GTFS stop_times/trips/calendar werden in PostGIS per SQL aggregiert. "
-                "Service-Kalender wird als Wochenanteilsgewicht genutzt; Ergebnis je 10.000 Einwohner auf Gemeindeebene."
-            ),
-            values=departures_values,
-        )
+            loaded_feeds = 0
+            active_stage_keys: list[str] = []
+            for idx, url in enumerate(urls):
+                feed_key = f"f{idx}"
+                schema_base = f"oepnv_gtfs_f{idx}"
 
-        _write_indicator(
-            key="oepnv_departures_total",
-            name="OEPNV-Angebotsmasse",
-            category="oepnv",
-            unit="count",
-            direction="higher_is_better",
-            normalization_mode="log",
-            methodology=(
-                "Absolute GTFS-Abfahrtsmasse je Gemeinde aus stop_times/trips/calendar in SQL aggregiert. "
-                "Die Metrik wird logarithmisch normiert, damit große Netze sichtbar besser abschneiden koennen, "
-                "ohne sehr große Staedte unverhaeltnismaessig zu bevorzugen."
-            ),
-            values=departures_total_values,
-        )
+                try:
+                    gtfs_path = _download_gtfs(url)
+                    raw_imported = False
+                    registry_row = _get_feed_registry(feed_key)
+                    active_schema_name = registry_row[0] if registry_row else schema_base
 
-        _write_indicator(
-            key="oepnv_departure_regularity",
-            name="OEPNV-Abfahrtsregelmaessigkeit",
-            category="oepnv",
-            unit="index_0_100",
-            direction="higher_is_better",
-            normalization_mode="log",
-            methodology=(
-                "Regelmaessigkeitsindex aus 15-Minuten-Bins pro Haltestelle auf Basis von GTFS stop_times in SQL. "
-                "Aggregation je Gemeinde gewichtet mit Abfahrtsvolumen. Die Normierung erfolgt logarithmisch, "
-                "damit Unterschiede grosser Netze nicht unverhaeltnismaessig hart auf den Gesamtscore durchschlagen."
-            ),
-            values=regularity_values,
-        )
+                    if _should_import_gtfs(feed_key, gtfs_path):
+                        import_schema_name = f"{schema_base}_{int(time.time())}"
+                        _import_gtfs_to_postgres(gtfs_path, import_schema_name)
+                        _store_feed_registry(feed_key, gtfs_path, import_schema_name)
+                        active_schema_name = import_schema_name
+                        raw_imported = True
+                    else:
+                        logger.info("GTFS-Rohimport uebersprungen, Feed unveraendert: %s", gtfs_path)
 
-        logger.info(
-            "OEPNV-Import abgeschlossen (Feeds=%s, Stops=%s Regionen, Abfahrtsdichte=%s Regionen, Angebotsmasse=%s Regionen, Regelmaessigkeit=%s Regionen)",
-            loaded_feeds,
-            len(stop_density_values),
-            len(departures_values),
-            len(departures_total_values),
-            len(regularity_values),
-        )
-    finally:
-        _release_import_lock()
+                    if raw_imported or _should_rebuild_staging(feed_key, municipality_signature):
+                        active_stage_key = f"{feed_key}:{int(time.time())}"
+                        logger.info("Starte GTFS-Staging fuer %s mit stage key %s", feed_key, active_stage_key)
+                        _load_feed_into_staging(active_stage_key, active_schema_name)
+                        _store_stage_registry(feed_key, municipality_signature, active_stage_key)
+                    else:
+                        logger.info("GTFS-Staging uebersprungen, Feed und Gemeinden unveraendert: %s", feed_key)
+                        stage_registry = _get_stage_registry(feed_key)
+                        if stage_registry and stage_registry[1]:
+                            active_stage_key = stage_registry[1]
+                        else:
+                            raise RuntimeError(f"Kein aktiver GTFS-Stage-Key fuer {feed_key} vorhanden")
+                    active_stage_keys.append(active_stage_key)
+                    loaded_feeds += 1
+                except Exception as exc:
+                    logger.warning("GTFS-Verarbeitung fehlgeschlagen (%s): %s", url, exc)
+                    continue
+
+            if loaded_feeds == 0:
+                logger.warning("Kein GTFS-Feed erfolgreich verarbeitet. Kein Write.")
+                return
+
+            stop_density_values, departures_values, departures_total_values, regularity_values = _compute_metrics(active_stage_keys)
+
+            _write_indicator(
+                key="oepnv_stop_density",
+                name="OEPNV-Haltestellendichte",
+                category="oepnv",
+                unit="stops_per_10k",
+                direction="higher_is_better",
+                normalization_mode="log",
+                methodology=(
+                    "GTFS-CSV-Dateien werden direkt nach PostgreSQL geladen. Haltestellen werden der naechsten "
+                    "Gemeindegeometrie via PostGIS zugeordnet, mit Zentroid-Fallback ausserhalb der Polygonflaechen, "
+                    "ueber Koordinaten dedupliziert und je 10.000 Einwohner normiert."
+                ),
+                values=stop_density_values,
+            )
+
+            _write_indicator(
+                key="oepnv_departures_per_10k",
+                name="OEPNV-Abfahrtsdichte",
+                category="oepnv",
+                unit="departures_per_10k",
+                direction="higher_is_better",
+                normalization_mode="log",
+                methodology=(
+                    "GTFS stop_times/trips/calendar werden in PostGIS per SQL aggregiert. "
+                    "Service-Kalender wird als Wochenanteilsgewicht genutzt; Ergebnis je 10.000 Einwohner auf Gemeindeebene."
+                ),
+                values=departures_values,
+            )
+
+            _write_indicator(
+                key="oepnv_departures_total",
+                name="OEPNV-Angebotsmasse",
+                category="oepnv",
+                unit="count",
+                direction="higher_is_better",
+                normalization_mode="log",
+                methodology=(
+                    "Absolute GTFS-Abfahrtsmasse je Gemeinde aus stop_times/trips/calendar in SQL aggregiert. "
+                    "Die Metrik wird logarithmisch normiert, damit große Netze sichtbar besser abschneiden koennen, "
+                    "ohne sehr große Staedte unverhaeltnismaessig zu bevorzugen."
+                ),
+                values=departures_total_values,
+            )
+
+            _write_indicator(
+                key="oepnv_departure_regularity",
+                name="OEPNV-Abfahrtsregelmaessigkeit",
+                category="oepnv",
+                unit="index_0_100",
+                direction="higher_is_better",
+                normalization_mode="log",
+                methodology=(
+                    "Regelmaessigkeitsindex aus 15-Minuten-Bins pro Haltestelle auf Basis von GTFS stop_times in SQL. "
+                    "Aggregation je Gemeinde gewichtet mit Abfahrtsvolumen. Die Normierung erfolgt logarithmisch, "
+                    "damit Unterschiede grosser Netze nicht unverhaeltnismaessig hart auf den Gesamtscore durchschlagen."
+                ),
+                values=regularity_values,
+            )
+
+            run.set_rows_written(len(stop_density_values) + len(departures_values) + len(departures_total_values) + len(regularity_values))
+            logger.info(
+                "OEPNV-Import abgeschlossen (Feeds=%s, Stops=%s Regionen, Abfahrtsdichte=%s Regionen, Angebotsmasse=%s Regionen, Regelmaessigkeit=%s Regionen)",
+                loaded_feeds,
+                len(stop_density_values),
+                len(departures_values),
+                len(departures_total_values),
+                len(regularity_values),
+            )
+        finally:
+            _release_import_lock()
 
 
 if __name__ == "__main__":

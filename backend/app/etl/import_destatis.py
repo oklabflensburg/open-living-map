@@ -19,6 +19,7 @@ from app.etl.common import (
     clear_indicator_values,
     get_or_create_indicator,
     normalize,
+    tracked_etl_run,
     upsert_region_indicator_value,
     with_session,
 )
@@ -747,155 +748,161 @@ def _backfill_region_population(
 
 def main() -> None:
     logger.info("Destatis/GENESIS-Import gestartet")
-
-    with with_session() as cleanup_session:
-        for legacy_key in ["population_density", "population_young_ratio"]:
-            legacy = cleanup_session.exec(
-                select(IndicatorDefinition).where(
-                    IndicatorDefinition.key == legacy_key)
-            ).first()
-            if legacy:
-                cleanup_session.exec(
-                    delete(RegionIndicatorValue).where(
-                        RegionIndicatorValue.indicator_id == legacy.id,
-                        RegionIndicatorValue.period == settings.default_score_period,
+    with tracked_etl_run(
+        job_name="import_destatis",
+        sources=[
+            {"source_name": "GENESIS API", "source_url": settings.genesis_api_url},
+        ],
+    ) as run:
+        with with_session() as cleanup_session:
+            for legacy_key in ["population_density", "population_young_ratio"]:
+                legacy = cleanup_session.exec(
+                    select(IndicatorDefinition).where(
+                        IndicatorDefinition.key == legacy_key)
+                ).first()
+                if legacy:
+                    cleanup_session.exec(
+                        delete(RegionIndicatorValue).where(
+                            RegionIndicatorValue.indicator_id == legacy.id,
+                            RegionIndicatorValue.period == settings.default_score_period,
+                        )
                     )
-                )
-                cleanup_session.exec(delete(IndicatorDefinition).where(
-                    IndicatorDefinition.id == legacy.id))
-                cleanup_session.commit()
-                logger.info("Legacy-Indicator entfernt: %s", legacy_key)
+                    cleanup_session.exec(delete(IndicatorDefinition).where(
+                        IndicatorDefinition.id == legacy.id))
+                    cleanup_session.commit()
+                    logger.info("Legacy-Indicator entfernt: %s", legacy_key)
 
-    auth = _credential_payload()
-    if auth is None:
-        logger.warning(
-            "Keine GENESIS Zugangsdaten gesetzt (GENESIS_USERNAME/GENESIS_PASSWORD oder GENESIS_API_KEY). "
-            "Destatis-Import wird ohne Bootstrap uebersprungen."
-        )
-        return
-
-    specs = _load_specs()
-    if not specs:
-        logger.warning(
-            "Keine Destatis-Indikator-Spezifikation vorhanden. Kein Write.")
-        return
-    _validate_endpoint_for_specs(specs)
-
-    with with_session() as session:
-        regions = list(session.exec(select(Region)))
-        region_by_ars = {region.ars: region.id for region in regions}
-        content_cache: dict[tuple[str, tuple[tuple[str, str], ...]], str] = {}
-
-        written = 0
-        for spec in specs:
-            try:
-                cache_key = (
-                    spec.table_code,
-                    tuple(sorted((spec.params or {}).items())),
-                )
-                logger.info("Lade Destatis-Indikator %s aus Tabelle %s",
-                            spec.key, spec.table_code)
-                content = content_cache.get(cache_key)
-                if content is None:
-                    content = _fetch_table_csv(spec, auth)
-                    content_cache[cache_key] = content
-                rows = _parse_genesis_content(spec, content)
-            except GenesisRequestLimitError as exc:
-                logger.warning(
-                    "Destatis-Tabelle %s (%s) fehlgeschlagen: %s", spec.table_code, spec.key, exc)
-                cooldown_seconds = max(
-                    settings.genesis_limit_cooldown_seconds, 0)
-                if cooldown_seconds > 0:
-                    logger.warning(
-                        "GENESIS request limit aktiv. Warte %s Sekunden vor Abbruch des Imports.",
-                        cooldown_seconds,
-                    )
-                    time.sleep(cooldown_seconds)
-                logger.warning(
-                    "Destatis-Import wegen aktivem GENESIS Request-Limit abgebrochen. "
-                    "Warte ca. 15 Minuten oder setze GENESIS_LIMIT_COOLDOWN_SECONDS."
-                )
-                return
-            except Exception as exc:
-                logger.warning(
-                    "Destatis-Tabelle %s (%s) fehlgeschlagen: %s", spec.table_code, spec.key, exc)
-                continue
-
-            indicator = get_or_create_indicator(
-                session,
-                key=spec.key,
-                name=spec.name,
-                category=spec.category,
-                unit=spec.unit,
-                direction=spec.direction,
-                normalization_mode=spec.normalization_mode,
-                source_name=spec.source_name,
-                source_url=spec.source_url,
-                methodology=spec.methodology,
+        auth = _credential_payload()
+        if auth is None:
+            logger.warning(
+                "Keine GENESIS Zugangsdaten gesetzt (GENESIS_USERNAME/GENESIS_PASSWORD oder GENESIS_API_KEY). "
+                "Destatis-Import wird ohne Bootstrap uebersprungen."
             )
+            return
 
-            mapped: list[tuple[int, float]] = []
-            for ars, raw in rows:
-                region_id = region_by_ars.get(ars)
-                if region_id is not None:
-                    mapped.append((region_id, raw))
+        specs = _load_specs()
+        if not specs:
+            logger.warning(
+                "Keine Destatis-Indikator-Spezifikation vorhanden. Kein Write.")
+            return
+        _validate_endpoint_for_specs(specs)
 
-            if not mapped:
+        with with_session() as session:
+            regions = list(session.exec(select(Region)))
+            region_by_ars = {region.ars: region.id for region in regions}
+            content_cache: dict[tuple[str, tuple[tuple[str, str], ...]], str] = {}
+
+            written = 0
+            for spec in specs:
+                try:
+                    cache_key = (
+                        spec.table_code,
+                        tuple(sorted((spec.params or {}).items())),
+                    )
+                    logger.info("Lade Destatis-Indikator %s aus Tabelle %s",
+                                spec.key, spec.table_code)
+                    content = content_cache.get(cache_key)
+                    if content is None:
+                        content = _fetch_table_csv(spec, auth)
+                        content_cache[cache_key] = content
+                    rows = _parse_genesis_content(spec, content)
+                except GenesisRequestLimitError as exc:
+                    logger.warning(
+                        "Destatis-Tabelle %s (%s) fehlgeschlagen: %s", spec.table_code, spec.key, exc)
+                    cooldown_seconds = max(
+                        settings.genesis_limit_cooldown_seconds, 0)
+                    if cooldown_seconds > 0:
+                        logger.warning(
+                            "GENESIS request limit aktiv. Warte %s Sekunden vor Abbruch des Imports.",
+                            cooldown_seconds,
+                        )
+                        time.sleep(cooldown_seconds)
+                    logger.warning(
+                        "Destatis-Import wegen aktivem GENESIS Request-Limit abgebrochen. "
+                        "Warte ca. 15 Minuten oder setze GENESIS_LIMIT_COOLDOWN_SECONDS."
+                    )
+                    return
+                except Exception as exc:
+                    logger.warning(
+                        "Destatis-Tabelle %s (%s) fehlgeschlagen: %s", spec.table_code, spec.key, exc)
+                    continue
+
+                indicator = get_or_create_indicator(
+                    session,
+                    key=spec.key,
+                    name=spec.name,
+                    category=spec.category,
+                    unit=spec.unit,
+                    direction=spec.direction,
+                    normalization_mode=spec.normalization_mode,
+                    source_name=spec.source_name,
+                    source_url=spec.source_url,
+                    methodology=spec.methodology,
+                )
+
+                mapped: list[tuple[int, float]] = []
+                for ars, raw in rows:
+                    region_id = region_by_ars.get(ars)
+                    if region_id is not None:
+                        mapped.append((region_id, raw))
+
+                if not mapped:
+                    clear_indicator_values(
+                        session,
+                        indicator_id=indicator.id,
+                        period=settings.default_score_period,
+                    )
+                    logger.warning(
+                        "Destatis-Tabelle %s (%s) ergab keine exakt auf Gemeinden mappbaren Werte. "
+                        "Vorhandene Werte fuer den Zeitraum wurden entfernt.",
+                        spec.table_code,
+                        spec.key,
+                    )
+                    continue
+
                 clear_indicator_values(
                     session,
                     indicator_id=indicator.id,
                     period=settings.default_score_period,
                 )
-                logger.warning(
-                    "Destatis-Tabelle %s (%s) ergab keine exakt auf Gemeinden mappbaren Werte. "
-                    "Vorhandene Werte fuer den Zeitraum wurden entfernt.",
-                    spec.table_code,
-                    spec.key,
-                )
-                continue
 
-            clear_indicator_values(
-                session,
-                indicator_id=indicator.id,
-                period=settings.default_score_period,
-            )
+                raw_values = [value for _, value in mapped]
+                normalized_values = normalize(raw_values, spec.direction, mode=spec.normalization_mode)
 
-            raw_values = [value for _, value in mapped]
-            normalized_values = normalize(raw_values, spec.direction, mode=spec.normalization_mode)
-
-            for (region_id, raw), norm in zip(mapped, normalized_values):
-                upsert_region_indicator_value(
-                    session,
-                    region_id=region_id,
-                    indicator_id=indicator.id,
-                    period=settings.default_score_period,
-                    raw_value=round(raw, 4),
-                    normalized_value=norm,
-                    quality_flag="ok",
-                )
-
-            if spec.key == "population_total_destatis":
-                updated_regions = _backfill_region_population(
-                    session, region_by_ars, mapped)
-                if updated_regions:
-                    logger.info(
-                        "Region.population aus Destatis-Fallback aktualisiert: %s Regionen",
-                        updated_regions,
+                for (region_id, raw), norm in zip(mapped, normalized_values):
+                    upsert_region_indicator_value(
+                        session,
+                        region_id=region_id,
+                        indicator_id=indicator.id,
+                        period=settings.default_score_period,
+                        raw_value=round(raw, 4),
+                        normalized_value=norm,
+                        quality_flag="ok",
                     )
 
-            written += 1
-            logger.info(
-                "Destatis-Indikator %s geladen (table=%s, rows=%s)",
-                spec.key,
-                spec.table_code,
-                len(mapped),
-            )
+                if spec.key == "population_total_destatis":
+                    updated_regions = _backfill_region_population(
+                        session, region_by_ars, mapped)
+                    if updated_regions:
+                        logger.info(
+                            "Region.population aus Destatis-Fallback aktualisiert: %s Regionen",
+                            updated_regions,
+                        )
 
-        if written == 0:
-            logger.warning("Kein Destatis-Indikator erfolgreich geladen.")
-        else:
-            logger.info(
-                "Destatis/GENESIS-Import abgeschlossen (%s Indikatoren)", written)
+                written += 1
+                logger.info(
+                    "Destatis-Indikator %s geladen (table=%s, rows=%s)",
+                    spec.key,
+                    spec.table_code,
+                    len(mapped),
+                )
+
+            run.set_rows_written(written)
+            if written == 0:
+                logger.warning("Kein Destatis-Indikator erfolgreich geladen.")
+            else:
+                logger.info(
+                    "Destatis/GENESIS-Import abgeschlossen (%s Indikatoren)", written)
 
 
 if __name__ == "__main__":

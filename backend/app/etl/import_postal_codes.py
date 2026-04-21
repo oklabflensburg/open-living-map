@@ -3,6 +3,7 @@ import logging
 from sqlalchemy import text
 
 from app.core.db import engine
+from app.etl.common import tracked_etl_run
 
 logger = logging.getLogger("etl.import_postal_codes")
 logging.basicConfig(level=logging.INFO)
@@ -214,10 +215,18 @@ def rebuild_region_postal_codes() -> int:
 
 def main() -> None:
     logger.info("PLZ-Import gestartet")
-    staged = rebuild_postal_area_stage()
-    logger.info("PLZ-Stage geschrieben: %s OSM-Postleitzahlflaechen", staged)
-    inserted = rebuild_region_postal_codes()
-    logger.info("PLZ-Mapping geschrieben: %s Gemeinde/PLZ-Zuordnungen", inserted)
+    with tracked_etl_run(
+        job_name="import_postal_codes",
+        sources=[
+            {"source_name": "OpenStreetMap postal polygons", "source_url": "osm.planet_osm_polygon"},
+            {"source_name": "BKG municipality boundaries", "source_url": "geo.municipality_boundary"},
+        ],
+    ) as run:
+        staged = rebuild_postal_area_stage()
+        logger.info("PLZ-Stage geschrieben: %s OSM-Postleitzahlflaechen", staged)
+        inserted = rebuild_region_postal_codes()
+        run.set_rows_written(inserted)
+        logger.info("PLZ-Mapping geschrieben: %s Gemeinde/PLZ-Zuordnungen", inserted)
 
 
 if __name__ == "__main__":

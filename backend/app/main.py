@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import regions
 from app.core.config import settings
 from app.core.db import SchemaDriftError, assert_schema_is_current
+from app.core.logging import configure_logging, request_logging_middleware
+
+configure_logging()
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 
@@ -20,6 +23,8 @@ app.add_middleware(
 )
 
 logger = logging.getLogger(__name__)
+
+app.middleware("http")(request_logging_middleware)
 
 
 @app.on_event("startup")

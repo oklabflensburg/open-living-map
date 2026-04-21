@@ -61,6 +61,46 @@
     <div class="rounded-xl border border-amber-200 bg-amber-50/60 p-6">
       <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
+          <h2 class="text-lg font-semibold">Klima gesamt</h2>
+          <p class="text-sm text-slate-500">DWD- und Proxy-Daten für {{ detail.region.name }}</p>
+        </div>
+      </div>
+
+      <div v-if="climateStats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <article
+          v-for="item in climateStats"
+          :key="item.label"
+          class="cursor-pointer rounded-lg border border-amber-200 bg-white/80 p-4 transition"
+          :class="selectedClimateStationKey === item.indicatorKey ? 'border-amber-400 bg-amber-100' : 'hover:border-amber-300 hover:bg-amber-50/80'"
+          @click="toggleClimateStation(item.indicatorKey)"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
+          <p class="mt-2 text-2xl font-semibold text-slate-900">{{ item.value }}</p>
+          <p v-if="item.note" class="mt-1 text-xs text-slate-500">{{ item.note }}</p>
+          <div v-if="item.stationName" class="mt-3 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              Nächstgelegene DWD-Station
+            </p>
+            <p class="mt-1 text-sm font-medium text-slate-900">
+              {{ item.stationName }}
+            </p>
+            <p class="mt-1 text-xs text-slate-600">
+              Stations-ID {{ item.stationId }}
+            </p>
+          </div>
+          <p class="mt-3 text-xs font-medium text-amber-700">
+            {{ selectedClimateStationKey === item.indicatorKey ? 'Marker auf Karte fokussiert' : 'Marker auf Karte anzeigen' }}
+          </p>
+        </article>
+      </div>
+      <p v-else class="text-sm text-amber-700">
+        Für diese Gemeinde sind aktuell keine zusammengefassten Klima-Daten verfügbar.
+      </p>
+    </div>
+
+    <div class="rounded-xl border border-orange-200 bg-orange-50/70 p-6">
+      <div class="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
           <h2 class="text-lg font-semibold">Flächenstatistik</h2>
           <p class="text-sm text-slate-500">Flächenatlas {{ detail.land_use_stat?.year ?? 2019 }} für {{ detail.region.name }}</p>
         </div>
@@ -70,7 +110,7 @@
         <article
           v-for="item in landUseStats"
           :key="item.label"
-          class="rounded-lg border border-amber-200 bg-white/80 p-4"
+          class="rounded-lg border border-orange-200 bg-white/80 p-4"
         >
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">{{ item.value }}</p>
@@ -218,7 +258,8 @@
       <RegionBoundaryMap :geometry="detail.geometry" :name="detail.region.name"
         :centroid-lat="detail.region.centroid_lat" :centroid-lon="detail.region.centroid_lon"
         :overlay-pois="activeOverlayPois" :selected-overlay-label="activeOverlayLabel"
-        :air-stations="detail.air_stations" :selected-air-station-id="selectedAirStationId" />
+        :air-stations="detail.air_stations" :selected-air-station-id="selectedAirStationId"
+        :climate-stations="detail.climate_stations" :selected-climate-station-id="selectedClimateStationId" />
     </div>
 
     <div class="rounded-xl border border-slate-200 bg-white p-6">
@@ -275,6 +316,53 @@
     </div>
 
     <div class="rounded-xl border border-slate-200 bg-white p-6">
+      <div class="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold">Datenbasis und Aktualität</h2>
+          <p class="text-sm text-slate-500">
+            {{ trustSummary }}
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <article
+          v-for="entry in coverageEntries"
+          :key="entry.key"
+          class="rounded-lg border p-4"
+          :class="indicatorCategoryTheme(entry.key).cardClass"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <p class="text-sm font-semibold text-slate-900">{{ entry.label }}</p>
+            <span
+              class="rounded-full px-2.5 py-1 text-xs font-semibold"
+              :class="indicatorCategoryTheme(entry.key).badgeClass"
+            >
+              {{ formatCoveragePercent(entry.coverage) }}
+            </span>
+          </div>
+          <p class="mt-2 text-xs text-slate-600">
+            {{ coverageEntryText(entry.coverage) }}
+          </p>
+          <p class="mt-1 text-xs text-slate-600">
+            {{ freshnessEntryText(entry.updatedAt) }}
+          </p>
+          <p class="mt-1 text-xs" :class="entry.qualityStatus === 'attention' ? 'text-amber-700' : 'text-emerald-700'">
+            {{ qualitySummaryText(entry.qualityStatus) }}
+          </p>
+          <ul v-if="entry.qualityNotes.length" class="mt-2 space-y-1 text-xs text-amber-800">
+            <li v-for="note in entry.qualityNotes" :key="note">
+              {{ note }}
+            </li>
+          </ul>
+          <p v-if="entry.sources.length" class="mt-1 text-xs text-slate-500">
+            Quellen: {{ entry.sources.join(', ') }}
+          </p>
+        </article>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-slate-200 bg-white p-6">
       <h2 class="mb-2 text-lg font-semibold">Quellen</h2>
       <SourceList :sources="detail.source_links" />
     </div>
@@ -288,7 +376,11 @@
 import ScoreBar from '~/components/ScoreBar.vue'
 import SourceList from '~/components/SourceList.vue'
 import RegionBoundaryMap from '~/components/RegionBoundaryMap.vue'
-import type { GeoJsonFeatureCollection, RecommendationIndicatorDetail, RegionDetailResponse } from '~/types/api'
+import type {
+  GeoJsonFeatureCollection,
+  RecommendationIndicatorDetail,
+  RegionDetailResponse
+} from '~/types/api'
 
 const { siteName, absoluteUrl } = useSiteSeo()
 const route = useRoute()
@@ -301,6 +393,7 @@ const selectedAmenityCategory = ref<string | null>(null)
 const accidentPois = ref<GeoJsonFeatureCollection | null>(null)
 const selectedAccidentCategory = ref<string | null>(null)
 const selectedAirStationKey = ref<string | null>(null)
+const selectedClimateStationKey = ref<string | null>(null)
 
 useSeoMeta({
   title: () => (detail.value ? `${detail.value.region.name}` : 'Region'),
@@ -431,6 +524,111 @@ const categoryThemes: Record<string, { cardClass: string; badgeClass: string }> 
   }
 }
 
+const coverageEntries = computed(() => {
+  const coverage = detail.value?.coverage
+  const freshness = detail.value?.freshness
+  if (!coverage) {
+    return []
+  }
+
+  return [
+    {
+      key: 'climate',
+      label: 'Klima',
+      coverage: coverage.climate,
+      updatedAt: freshness?.climate.updated_at ?? null,
+      sources: freshness?.climate.sources ?? [],
+      qualityStatus: detail.value?.quality.climate.status ?? 'ok',
+      qualityNotes: detail.value?.quality.climate.notes ?? []
+    },
+    {
+      key: 'air',
+      label: 'Luftqualität',
+      coverage: coverage.air,
+      updatedAt: freshness?.air.updated_at ?? null,
+      sources: freshness?.air.sources ?? [],
+      qualityStatus: detail.value?.quality.air.status ?? 'ok',
+      qualityNotes: detail.value?.quality.air.notes ?? []
+    },
+    {
+      key: 'safety',
+      label: 'Verkehrssicherheit',
+      coverage: coverage.safety,
+      updatedAt: freshness?.safety.updated_at ?? null,
+      sources: freshness?.safety.sources ?? [],
+      qualityStatus: detail.value?.quality.safety.status ?? 'ok',
+      qualityNotes: detail.value?.quality.safety.notes ?? []
+    },
+    {
+      key: 'demographics',
+      label: 'Demografie/Familie',
+      coverage: coverage.demographics,
+      updatedAt: freshness?.demographics.updated_at ?? null,
+      sources: freshness?.demographics.sources ?? [],
+      qualityStatus: detail.value?.quality.demographics.status ?? 'ok',
+      qualityNotes: detail.value?.quality.demographics.notes ?? []
+    },
+    {
+      key: 'amenities',
+      label: 'Alltagsnähe',
+      coverage: coverage.amenities,
+      updatedAt: freshness?.amenities.updated_at ?? null,
+      sources: freshness?.amenities.sources ?? [],
+      qualityStatus: detail.value?.quality.amenities.status ?? 'ok',
+      qualityNotes: detail.value?.quality.amenities.notes ?? []
+    },
+    {
+      key: 'landuse',
+      label: 'Flächennutzung',
+      coverage: coverage.landuse,
+      updatedAt: freshness?.landuse.updated_at ?? null,
+      sources: freshness?.landuse.sources ?? [],
+      qualityStatus: detail.value?.quality.landuse.status ?? 'ok',
+      qualityNotes: detail.value?.quality.landuse.notes ?? []
+    },
+    {
+      key: 'oepnv',
+      label: 'ÖPNV',
+      coverage: coverage.oepnv,
+      updatedAt: freshness?.oepnv.updated_at ?? null,
+      sources: freshness?.oepnv.sources ?? [],
+      qualityStatus: detail.value?.quality.oepnv.status ?? 'ok',
+      qualityNotes: detail.value?.quality.oepnv.notes ?? []
+    }
+  ]
+})
+
+const hasCoverageMetadata = computed(() => coverageEntries.value.some((entry) => entry.coverage > 0))
+const latestFreshness = computed(() => {
+  const values = coverageEntries.value
+    .map((entry) => entry.updatedAt)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.getTime()))
+
+  if (!values.length) {
+    return null
+  }
+
+  return new Date(Math.max(...values.map((value) => value.getTime())))
+})
+
+const trustSummary = computed(() => {
+  if (!detail.value) {
+    return ''
+  }
+
+  if (!hasCoverageMetadata.value) {
+    return 'Für diesen Datenstand liegen noch keine separat berechneten Abdeckungswerte vor. Die Zeitstempel zeigen trotzdem, wann einzelne Kategorien zuletzt aktualisiert wurden.'
+  }
+
+  const averageCoverage = coverageEntries.value.reduce((sum, entry) => sum + entry.coverage, 0) / coverageEntries.value.length
+  const freshnessText = latestFreshness.value
+    ? `Neuester Datenstand in dieser Ansicht: ${formatDate(latestFreshness.value)}.`
+    : 'Für diese Ansicht liegt noch kein aggregierter Zeitstempel vor.'
+  return `Die Karten zeigen, wie vollständig die Datengrundlage je Kategorie aktuell abgedeckt ist. Im Mittel sind ${formatCoveragePercent(averageCoverage)} verfügbar. ${freshnessText}`
+})
+
 function categoryLabel(category: string) {
   return categoryLabels[category] || category
 }
@@ -464,6 +662,60 @@ function formatAirValue(value: number) {
 
 function formatScoreValue(value: number) {
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)
+}
+
+function formatCoveragePercent(value: number) {
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value * 100) + ' %'
+}
+
+function formatClimateDays(value: number) {
+  return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(value) + ' Tage'
+}
+
+function formatMillimeters(value: number) {
+  return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 }).format(value) + ' mm'
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(value)
+}
+
+function coverageEntryText(coverage: number) {
+  if (!hasCoverageMetadata.value) {
+    return 'Separate Coverage-Metadaten fehlen für diesen Datenstand noch.'
+  }
+  if (coverage >= 0.999) {
+    return 'Vollständig mit berechneten Daten abgedeckt.'
+  }
+  if (coverage <= 0) {
+    return 'Für diese Kategorie liegt aktuell keine berechnete Datenabdeckung vor.'
+  }
+  return 'Ein Teil der Teilindikatoren liegt vor, aber nicht die vollständige Datengrundlage.'
+}
+
+function freshnessEntryText(updatedAt: string | null) {
+  if (!updatedAt) {
+    return 'Kein aggregierter Aktualitätszeitpunkt verfügbar.'
+  }
+
+  const date = new Date(updatedAt)
+  if (Number.isNaN(date.getTime())) {
+    return 'Aktualitätszeitpunkt konnte nicht gelesen werden.'
+  }
+
+  return `Zuletzt aktualisiert am ${formatDate(date)}.`
+}
+
+function qualitySummaryText(status: string) {
+  if (status === 'attention') {
+    return 'Für diese Kategorie gibt es Qualitäts- oder Proxy-Hinweise.'
+  }
+
+  return 'Keine besonderen Qualitätswarnungen für diese Kategorie.'
 }
 
 function formatStationCoordinate(value: number) {
@@ -582,6 +834,76 @@ const demographicStats = computed(() => {
   return items
 })
 
+const climateStats = computed(() => {
+  if (!detail.value) {
+    return []
+  }
+
+  const items: Array<{
+    indicatorKey: string
+    label: string
+    value: string
+    note?: string
+    stationId?: string
+    stationName?: string
+    latitude?: number | null
+    longitude?: number | null
+  }> = []
+  const heatDays = indicatorByKey('heat_days')
+  const summerDays = indicatorByKey('summer_days')
+  const precipitation = indicatorByKey('precipitation_proxy')
+  const heatStation = climateStationByKey('heat_days')
+  const summerStation = climateStationByKey('summer_days')
+  const precipitationStation = climateStationByKey('precipitation_proxy')
+
+  if (heatDays) {
+    items.push({
+      indicatorKey: 'heat_days',
+      label: 'Hitzetage',
+      value: formatClimateDays(heatDays.raw_value),
+      note: heatDays.quality_flag !== 'ohne besonderen Hinweis'
+        ? `Tagesmaximum ab 30,0 °C · ${heatDays.quality_flag}`
+        : 'Tagesmaximum ab 30,0 °C',
+      stationId: heatStation?.station_id,
+      stationName: heatStation?.station_name,
+      latitude: heatStation?.latitude,
+      longitude: heatStation?.longitude
+    })
+  }
+
+  if (summerDays) {
+    items.push({
+      indicatorKey: 'summer_days',
+      label: 'Sommertage',
+      value: formatClimateDays(summerDays.raw_value),
+      note: summerDays.quality_flag !== 'ohne besonderen Hinweis'
+        ? `Tagesmaximum ab 25,0 °C · ${summerDays.quality_flag}`
+        : 'Tagesmaximum ab 25,0 °C',
+      stationId: summerStation?.station_id,
+      stationName: summerStation?.station_name,
+      latitude: summerStation?.latitude,
+      longitude: summerStation?.longitude
+    })
+  }
+
+  if (precipitation) {
+    items.push({
+      indicatorKey: 'precipitation_proxy',
+      label: 'Niederschlag',
+      value: formatMillimeters(precipitation.raw_value),
+      note: precipitation.quality_flag !== 'ohne besonderen Hinweis'
+        ? precipitation.quality_flag
+        : 'laut DWD- bzw. Proxy-Datensatz',
+      stationId: precipitationStation?.station_id,
+      stationName: precipitationStation?.station_name,
+      latitude: precipitationStation?.latitude,
+      longitude: precipitationStation?.longitude
+    })
+  }
+
+  return items
+})
+
 const landUseStats = computed(() => {
   if (!detail.value?.land_use_stat) {
     return []
@@ -643,6 +965,13 @@ const selectedAirStationId = computed(() => {
   return detail.value.air_stations.find((station) => station.indicator_key === selectedAirStationKey.value)?.station_id ?? null
 })
 
+const selectedClimateStationId = computed(() => {
+  if (!detail.value || !selectedClimateStationKey.value) {
+    return null
+  }
+  return detail.value.climate_stations.find((station) => station.indicator_key === selectedClimateStationKey.value)?.station_id ?? null
+})
+
 const selectedAccidentLabel = computed(() => {
   if (!detail.value || !selectedAccidentCategory.value) {
     return null
@@ -652,6 +981,10 @@ const selectedAccidentLabel = computed(() => {
 
 const activeOverlayPois = computed(() => accidentPois.value ?? amenityPois.value)
 const activeOverlayLabel = computed(() => selectedAccidentLabel.value ?? selectedAmenityLabel.value)
+
+function climateStationByKey(key: string) {
+  return detail.value?.climate_stations.find((station) => station.indicator_key === key) ?? null
+}
 
 async function toggleAmenityPois(category: string) {
   if (!detail.value) {
@@ -667,6 +1000,7 @@ async function toggleAmenityPois(category: string) {
   selectedAccidentCategory.value = null
   accidentPois.value = null
   selectedAirStationKey.value = null
+  selectedClimateStationKey.value = null
   selectedAmenityCategory.value = category
   amenityPois.value = await fetchAmenityPois(String(route.params.slug), category)
 }
@@ -685,6 +1019,7 @@ async function toggleAccidentPois(category: string) {
   selectedAmenityCategory.value = null
   amenityPois.value = null
   selectedAirStationKey.value = null
+  selectedClimateStationKey.value = null
   selectedAccidentCategory.value = category
   accidentPois.value = await fetchAccidentPois(String(route.params.slug), category)
 }
@@ -694,7 +1029,17 @@ function toggleAirStation(indicatorKey: string) {
   amenityPois.value = null
   selectedAccidentCategory.value = null
   accidentPois.value = null
+  selectedClimateStationKey.value = null
   selectedAirStationKey.value = selectedAirStationKey.value === indicatorKey ? null : indicatorKey
+}
+
+function toggleClimateStation(indicatorKey: string) {
+  selectedAmenityCategory.value = null
+  amenityPois.value = null
+  selectedAccidentCategory.value = null
+  accidentPois.value = null
+  selectedAirStationKey.value = null
+  selectedClimateStationKey.value = selectedClimateStationKey.value === indicatorKey ? null : indicatorKey
 }
 
 onMounted(async () => {

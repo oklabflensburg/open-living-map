@@ -7,7 +7,7 @@ from sqlmodel import select
 
 from app.core.ars import normalize_ars
 from app.core.config import settings
-from app.etl.common import clear_indicator_values, get_or_create_indicator, normalize, with_session
+from app.etl.common import clear_indicator_values, get_or_create_indicator, normalize, tracked_etl_run, with_session
 from app.models.indicator import RegionIndicatorValue
 from app.models.region import Region
 
@@ -120,51 +120,60 @@ def parse_flaechenatlas_rows(path: Path) -> list[dict[str, float | int | str | N
 
 def main() -> None:
     logger.info("Flächenatlas-Import gestartet")
-    if not XLSX_PATH.exists():
-        logger.warning("Flächenatlas-Datei nicht gefunden: %s", XLSX_PATH)
-        return
+    with tracked_etl_run(
+        job_name="import_flaechenatlas",
+        sources=[
+            {
+                "source_name": "Destatis Flächenatlas 2019",
+                "source_url": "https://service.destatis.de/DE/karten/flaechenatlas2019daten.xlsx",
+            }
+        ],
+    ) as run:
+        if not XLSX_PATH.exists():
+            logger.warning("Flächenatlas-Datei nicht gefunden: %s", XLSX_PATH)
+            return
 
-    rows = parse_flaechenatlas_rows(XLSX_PATH)
-    if not rows:
-        logger.warning("Flächenatlas-Datei lieferte keine parsebaren Gemeindedaten.")
-        return
+        rows = parse_flaechenatlas_rows(XLSX_PATH)
+        if not rows:
+            logger.warning("Flächenatlas-Datei lieferte keine parsebaren Gemeindedaten.")
+            return
 
-    with with_session() as session:
-        ensure_flaechenatlas_table(session)
-        session.execute(text("TRUNCATE landuse.region_area_stat"))
-        session.execute(
-            text(
-                """
-                INSERT INTO landuse.region_area_stat (
-                    region_ars,
-                    year,
-                    forest_share_pct,
-                    settlement_transport_share_pct,
-                    agriculture_share_pct,
-                    transport_share_pct,
-                    settlement_transport_sqm_per_capita
-                )
-                VALUES (
-                    :region_ars,
-                    :year,
-                    :forest_share_pct,
-                    :settlement_transport_share_pct,
-                    :agriculture_share_pct,
-                    :transport_share_pct,
-                    :settlement_transport_sqm_per_capita
-                )
-                """
-            ),
-            rows,
-        )
-        session.commit()
+        with with_session() as session:
+            ensure_flaechenatlas_table(session)
+            session.execute(text("TRUNCATE landuse.region_area_stat"))
+            session.execute(
+                text(
+                    """
+                    INSERT INTO landuse.region_area_stat (
+                        region_ars,
+                        year,
+                        forest_share_pct,
+                        settlement_transport_share_pct,
+                        agriculture_share_pct,
+                        transport_share_pct,
+                        settlement_transport_sqm_per_capita
+                    )
+                    VALUES (
+                        :region_ars,
+                        :year,
+                        :forest_share_pct,
+                        :settlement_transport_share_pct,
+                        :agriculture_share_pct,
+                        :transport_share_pct,
+                        :settlement_transport_sqm_per_capita
+                    )
+                    """
+                ),
+                rows,
+            )
+            session.commit()
 
-        regions_by_ars = {
-            region.ars: region.id
-            for region in session.exec(select(Region).where(Region.level == "gemeinde"))
-        }
+            regions_by_ars = {
+                region.ars: region.id
+                for region in session.exec(select(Region).where(Region.level == "gemeinde"))
+            }
 
-        indicator_specs = [
+            indicator_specs = [
             (
                 "forest_share_pct",
                 "forest_share_pct",
@@ -197,56 +206,57 @@ def main() -> None:
             ),
         ]
 
-        source_url = "https://service.destatis.de/DE/karten/flaechenatlas2019daten.xlsx"
-        methodology = (
-            "Flächenatlas 2019 auf Gemeindeebene: Waldanteil, Landwirtschaftsanteil, "
-            "Siedlungs- und Verkehrsflächenanteil, Verkehrsflächenanteil sowie "
-            "Siedlungs- und Verkehrsfläche je Einwohner."
-        )
-
-        for field_name, indicator_key, indicator_name, direction in indicator_specs:
-            indicator = get_or_create_indicator(
-                session,
-                key=indicator_key,
-                name=indicator_name,
-                category="landuse",
-                unit="sqm_per_capita" if field_name == "settlement_transport_sqm_per_capita" else "percent",
-                direction=direction,
-                normalization_mode="robust_percentile",
-                source_name="Destatis Flächenatlas 2019",
-                source_url=source_url,
-                methodology=methodology,
-            )
-            clear_indicator_values(
-                session,
-                indicator_id=indicator.id,
-                period=settings.default_score_period,
+            source_url = "https://service.destatis.de/DE/karten/flaechenatlas2019daten.xlsx"
+            methodology = (
+                "Flächenatlas 2019 auf Gemeindeebene: Waldanteil, Landwirtschaftsanteil, "
+                "Siedlungs- und Verkehrsflächenanteil, Verkehrsflächenanteil sowie "
+                "Siedlungs- und Verkehrsfläche je Einwohner."
             )
 
-            values = [
-                (regions_by_ars[row["region_ars"]], float(row[field_name]))
-                for row in rows
-                if row["region_ars"] in regions_by_ars and row[field_name] is not None
-            ]
-            if not values:
-                continue
+            for field_name, indicator_key, indicator_name, direction in indicator_specs:
+                indicator = get_or_create_indicator(
+                    session,
+                    key=indicator_key,
+                    name=indicator_name,
+                    category="landuse",
+                    unit="sqm_per_capita" if field_name == "settlement_transport_sqm_per_capita" else "percent",
+                    direction=direction,
+                    normalization_mode="robust_percentile",
+                    source_name="Destatis Flächenatlas 2019",
+                    source_url=source_url,
+                    methodology=methodology,
+                )
+                clear_indicator_values(
+                    session,
+                    indicator_id=indicator.id,
+                    period=settings.default_score_period,
+                )
 
-            normalized_values = normalize(
-                [raw_value for _, raw_value in values],
-                direction,
-                mode="robust_percentile",
-            )
-            _batch_write_indicator_values(
-                session,
-                indicator_id=indicator.id,
-                period=settings.default_score_period,
-                values=values,
-                normalized_values=normalized_values,
-            )
+                values = [
+                    (regions_by_ars[row["region_ars"]], float(row[field_name]))
+                    for row in rows
+                    if row["region_ars"] in regions_by_ars and row[field_name] is not None
+                ]
+                if not values:
+                    continue
 
-        session.commit()
+                normalized_values = normalize(
+                    [raw_value for _, raw_value in values],
+                    direction,
+                    mode="robust_percentile",
+                )
+                _batch_write_indicator_values(
+                    session,
+                    indicator_id=indicator.id,
+                    period=settings.default_score_period,
+                    values=values,
+                    normalized_values=normalized_values,
+                )
 
-    logger.info("Flächenatlas-Import abgeschlossen (%s Gemeinden)", len(rows))
+            session.commit()
+            run.set_rows_written(len(rows))
+
+        logger.info("Flächenatlas-Import abgeschlossen (%s Gemeinden)", len(rows))
 
 
 if __name__ == "__main__":

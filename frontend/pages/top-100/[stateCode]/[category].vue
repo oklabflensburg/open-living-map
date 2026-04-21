@@ -38,6 +38,12 @@
           {{ response?.items.length || 0 }}
         </p>
       </div>
+      <div class="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-700">
+        <p class="font-semibold text-slate-900">Vertrauenshinweis zur Liste</p>
+        <p class="mt-1">
+          {{ listTrustSummary }}
+        </p>
+      </div>
     </div>
 
     <div v-if="pending" class="rounded-xl border border-slate-200 bg-white p-6 text-slate-500 shadow-sm">
@@ -168,6 +174,41 @@ const pending = ref(true)
 const errorMessage = ref('')
 const response = ref<RecommendationResponse | null>(null)
 
+const listTrustSummary = computed(() => {
+  const items = response.value?.items || []
+  if (!items.length) {
+    return 'Noch keine Daten geladen.'
+  }
+
+  const coverageValues = items
+    .map((item) => categoryCoverage(item, category))
+    .filter((value) => value > 0)
+
+  const latestDates = items
+    .map((item) => item.trust_updated_at)
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.getTime()))
+
+  const rowsWithWarnings = items.filter((item) => item.trust_quality_notes.length).length
+
+  if (!coverageValues.length) {
+    return 'Für diese Liste liegen noch keine separat berechneten Abdeckungswerte vor.'
+  }
+
+  const averageCoverage = Math.round(
+    (coverageValues.reduce((sum, value) => sum + value, 0) / coverageValues.length) * 100
+  )
+  const latestDateText = latestDates.length
+    ? `Neuester Datenstand in der Liste: ${formatDate(new Date(Math.max(...latestDates.map((value) => value.getTime()))))}.`
+    : 'Kein aggregierter Aktualitätszeitpunkt vorhanden.'
+  const warningText = rowsWithWarnings > 0
+    ? `${rowsWithWarnings} Einträge enthalten Qualitäts- oder Proxy-Hinweise.`
+    : 'Für die sichtbaren Einträge liegen keine besonderen Qualitätswarnungen vor.'
+
+  return `Die Ranking-Kategorie ist im Mittel zu ${averageCoverage} % abgedeckt. ${latestDateText} ${warningText}`
+})
+
 function levelLabel(level: string) {
   if (level === 'kreisfreie_stadt') {
     return 'Kreisfreie Stadt'
@@ -186,6 +227,46 @@ function locationSubtitle(item: RecommendationResponse['items'][number]) {
     return `AGS ${item.ars} · ${item.state_name} · ${item.district_name}`
   }
   return `AGS ${item.ars} · ${item.state_name} · ${levelLabel(item.level)}`
+}
+
+function categoryCoverage(item: RecommendationResponse['items'][number], rankingCategory: RankingCategory) {
+  const coverageByCategory: Record<RankingCategory, number> = {
+    climate: item.coverage_climate,
+    air: item.coverage_air,
+    safety: item.coverage_safety,
+    demographics: item.coverage_demographics,
+    amenities: item.coverage_amenities,
+    landuse: item.coverage_landuse,
+    oepnv: item.coverage_oepnv
+  }
+  return coverageByCategory[rankingCategory]
+}
+
+function categoryCoverageText(item: RecommendationResponse['items'][number], rankingCategory: RankingCategory) {
+  const coverage = categoryCoverage(item, rankingCategory)
+  const hasCoverageMetadata = [
+    item.coverage_climate,
+    item.coverage_air,
+    item.coverage_safety,
+    item.coverage_demographics,
+    item.coverage_amenities,
+    item.coverage_landuse,
+    item.coverage_oepnv
+  ].some((value) => value > 0)
+
+  if (!hasCoverageMetadata) {
+    return 'k. A.'
+  }
+
+  return `${Math.round(coverage * 100)} %`
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(value)
 }
 
 try {

@@ -20,6 +20,8 @@ class RecommendationIndicatorDetail(BaseModel):
     raw_value: float
     normalized_value: float
     quality_flag: str
+    source_name: str
+    updated_at: str | None = None
     text: str
 
 
@@ -49,6 +51,9 @@ class RecommendationItem(BaseModel):
     coverage_amenities: float = 0.0
     coverage_landuse: float = 0.0
     coverage_oepnv: float = 0.0
+    trust_updated_at: str | None = None
+    trust_sources: list[str] = Field(default_factory=list)
+    trust_quality_notes: list[str] = Field(default_factory=list)
     reason: str
     score_formula: str = ""
     calculation_details: list[str] = Field(default_factory=list)

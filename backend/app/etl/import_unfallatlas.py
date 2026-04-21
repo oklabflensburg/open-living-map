@@ -10,18 +10,20 @@ from sqlmodel import select
 
 from app.core.ars import normalize_ars
 from app.core.config import settings
+from app.core.logging import configure_logging
 from app.etl.common import (
     clear_indicator_values,
     download_file,
     get_or_create_indicator,
     normalize,
+    tracked_etl_run,
     upsert_region_indicator_value,
     with_session,
 )
 from app.models.region import Region
 
+configure_logging()
 logger = logging.getLogger("etl.import_unfallatlas")
-logging.basicConfig(level=logging.INFO)
 
 UNFALLATLAS_BASE_URL = "https://www.opengeodata.nrw.de/produkte/transport_verkehr/unfallatlas/"
 ACCIDENT_CATEGORY_KEYS = {
@@ -229,83 +231,92 @@ def _write_accident_points(session, df: pd.DataFrame) -> None:
 
 def main() -> None:
     logger.info("Unfallatlas-Import gestartet")
-
-    zip_path = _download_latest_csv_zip()
-    if zip_path is None:
-        logger.warning("Keine Unfallatlas CSV-ZIP gefunden. Import wird beendet.")
-        return
-
-    df = _read_unfallatlas_csv(zip_path)
-    if df.empty:
-        logger.warning("Unfallatlas CSV leer oder nicht lesbar. Kein Write.")
-        return
-
-    try:
-        df["ars"] = _to_region_ars(df)
-    except ValueError as exc:
-        logger.warning("Unfallatlas-Spalten unerwartet: %s", exc)
-        return
-
-    # Jeder Datensatz ist ein Unfallort-Ereignis, daher count je Gemeinde.
-    agg = df.groupby("ars", as_index=False).size().rename(columns={"size": "accidents_total"})
-
-    with with_session() as session:
-        regions = list(session.exec(select(Region)))
-        region_by_ars = {region.ars: region for region in regions}
-
-        rows: list[tuple[int, float]] = []
-        for _, row in agg.iterrows():
-            ars = str(row["ars"])
-            region = region_by_ars.get(ars)
-            if region is None:
-                continue
-            rows.append((region.id, float(row["accidents_total"])))
-
-        if not rows:
-            logger.warning("Unfallatlas-Daten konnten auf keine Region gemappt werden. Kein Write.")
+    with tracked_etl_run(
+        job_name="import_unfallatlas",
+        sources=[
+            {
+                "source_name": "Destatis Unfallatlas",
+                "source_url": "https://www.destatis.de/DE/Service/Statistik-Visualisiert/unfall-atlas.html",
+            }
+        ],
+    ) as run:
+        zip_path = _download_latest_csv_zip()
+        if zip_path is None:
+            logger.warning("Keine Unfallatlas CSV-ZIP gefunden. Import wird beendet.")
             return
 
-        _write_accident_points(session, df)
+        df = _read_unfallatlas_csv(zip_path)
+        if df.empty:
+            logger.warning("Unfallatlas CSV leer oder nicht lesbar. Kein Write.")
+            return
 
-        indicator = get_or_create_indicator(
-            session,
-            key="road_accidents_total",
-            name="Verkehrsunfaelle gesamt",
-            category="safety",
-            unit="count",
-            direction="lower_is_better",
-            normalization_mode="log",
-            source_name="Destatis Unfallatlas",
-            source_url="https://www.destatis.de/DE/Service/Statistik-Visualisiert/unfall-atlas.html",
-            methodology=(
-                "Unfallorte-CSV (aktuellstes Jahr) wird je Gemeinde aggregiert; "
-                "Gemeindezuordnung ueber ULAND/UREGBEZ/UKREIS/UGEMEINDE -> AGS; "
-                "Normierung logarithmisch mit leichtem Floor/Ceiling, damit keine exakten 0.0 oder 100.0 entstehen."
-            ),
-        )
-        clear_indicator_values(
-            session,
-            indicator_id=indicator.id,
-            period=settings.default_score_period,
-        )
+        try:
+            df["ars"] = _to_region_ars(df)
+        except ValueError as exc:
+            logger.warning("Unfallatlas-Spalten unerwartet: %s", exc)
+            return
 
-        raw_values = [raw for _, raw in rows]
-        normalized_values = [
-            _bounded_normalized_score(value)
-            for value in normalize(raw_values, indicator.direction, mode="log")
-        ]
-        for (region_id, raw), norm in zip(rows, normalized_values):
-            upsert_region_indicator_value(
+        # Jeder Datensatz ist ein Unfallort-Ereignis, daher count je Gemeinde.
+        agg = df.groupby("ars", as_index=False).size().rename(columns={"size": "accidents_total"})
+
+        with with_session() as session:
+            regions = list(session.exec(select(Region)))
+            region_by_ars = {region.ars: region for region in regions}
+
+            rows: list[tuple[int, float]] = []
+            for _, row in agg.iterrows():
+                ars = str(row["ars"])
+                region = region_by_ars.get(ars)
+                if region is None:
+                    continue
+                rows.append((region.id, float(row["accidents_total"])))
+
+            if not rows:
+                logger.warning("Unfallatlas-Daten konnten auf keine Region gemappt werden. Kein Write.")
+                return
+
+            _write_accident_points(session, df)
+
+            indicator = get_or_create_indicator(
                 session,
-                region_id=region_id,
+                key="road_accidents_total",
+                name="Verkehrsunfaelle gesamt",
+                category="safety",
+                unit="count",
+                direction="lower_is_better",
+                normalization_mode="log",
+                source_name="Destatis Unfallatlas",
+                source_url="https://www.destatis.de/DE/Service/Statistik-Visualisiert/unfall-atlas.html",
+                methodology=(
+                    "Unfallorte-CSV (aktuellstes Jahr) wird je Gemeinde aggregiert; "
+                    "Gemeindezuordnung ueber ULAND/UREGBEZ/UKREIS/UGEMEINDE -> AGS; "
+                    "Normierung logarithmisch mit leichtem Floor/Ceiling, damit keine exakten 0.0 oder 100.0 entstehen."
+                ),
+            )
+            clear_indicator_values(
+                session,
                 indicator_id=indicator.id,
                 period=settings.default_score_period,
-                raw_value=round(raw, 4),
-                normalized_value=norm,
-                quality_flag="ok",
             )
 
-        logger.info("Unfallatlas-Import abgeschlossen (%s Regionen)", len(rows))
+            raw_values = [raw for _, raw in rows]
+            normalized_values = [
+                _bounded_normalized_score(value)
+                for value in normalize(raw_values, indicator.direction, mode="log")
+            ]
+            for (region_id, raw), norm in zip(rows, normalized_values):
+                upsert_region_indicator_value(
+                    session,
+                    region_id=region_id,
+                    indicator_id=indicator.id,
+                    period=settings.default_score_period,
+                    raw_value=round(raw, 4),
+                    normalized_value=norm,
+                    quality_flag="ok",
+                )
+
+            run.set_rows_written(len(rows))
+            logger.info("Unfallatlas-Import abgeschlossen (%s Regionen)", len(rows))
 
 
 if __name__ == "__main__":

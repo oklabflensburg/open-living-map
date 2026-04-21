@@ -50,6 +50,11 @@ jobs:
       run: |
         cd backend
         find . -name "*.py" -type f | xargs python -m py_compile
+
+    - name: Run pytest
+      run: |
+        cd backend
+        pytest
     
     - name: Run migration check
       run: |

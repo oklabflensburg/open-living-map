@@ -1,5 +1,8 @@
 import logging
 import math
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -10,11 +13,93 @@ from sqlalchemy import delete
 
 from app.core.config import settings
 from app.core.db import SchemaDriftError, assert_schema_is_current, engine
+from app.core.logging import configure_logging
+from app.models.etl import EtlRun, EtlRunSource
 from app.models.indicator import IndicatorDefinition, RegionIndicatorValue
 from app.models.region import Region
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+configure_logging()
 logger = logging.getLogger("etl")
+
+
+@dataclass
+class EtlRunTracker:
+    job_name: str
+    sources: list[dict[str, str | None]] = field(default_factory=list)
+    rows_written: int | None = None
+
+    def set_rows_written(self, rows_written: int | None) -> None:
+        self.rows_written = rows_written
+
+    def add_source(
+        self,
+        *,
+        source_name: str,
+        source_url: str | None = None,
+        source_version: str | None = None,
+        source_hash: str | None = None,
+    ) -> None:
+        self.sources.append(
+            {
+                "source_name": source_name,
+                "source_url": source_url,
+                "source_version": source_version,
+                "source_hash": source_hash,
+            }
+        )
+
+
+@contextmanager
+def tracked_etl_run(
+    job_name: str,
+    *,
+    sources: list[dict[str, str | None]] | None = None,
+) -> Any:
+    tracker = EtlRunTracker(job_name=job_name, sources=list(sources or []))
+    run_id: int | None = None
+    start_time = datetime.utcnow()
+
+    with Session(engine) as session:
+        run = EtlRun(job_name=job_name, status="running", started_at=start_time)
+        session.add(run)
+        session.commit()
+        session.refresh(run)
+        run_id = run.id
+
+        for source in tracker.sources:
+            session.add(
+                EtlRunSource(
+                    etl_run_id=run_id,
+                    source_name=str(source["source_name"]),
+                    source_url=source.get("source_url"),
+                    source_version=source.get("source_version"),
+                    source_hash=source.get("source_hash"),
+                )
+            )
+        session.commit()
+
+    try:
+        yield tracker
+    except Exception as exc:
+        with Session(engine) as session:
+            run = session.get(EtlRun, run_id)
+            if run:
+                run.status = "failed"
+                run.rows_written = tracker.rows_written
+                run.error_message = str(exc)[:4000]
+                run.finished_at = datetime.utcnow()
+                session.add(run)
+                session.commit()
+        raise
+    else:
+        with Session(engine) as session:
+            run = session.get(EtlRun, run_id)
+            if run:
+                run.status = "completed"
+                run.rows_written = tracker.rows_written
+                run.finished_at = datetime.utcnow()
+                session.add(run)
+                session.commit()
 
 
 def ensure_dirs() -> None:

@@ -1,59 +1,147 @@
-# Wohnortkompass
+# Wohnort-Kompass
 
-Wohnortkompass ist ein lokales Monorepo fuer eine Deutschlandkarte mit kommunalen Wohnortindikatoren. Das Projekt kombiniert einen FastAPI-Backend-Stack mit einer Nuxt-Frontend-App und mehreren ETL-Jobs fuer Geometrien, Demografie, Klima, Luftqualitaet, OSM-POIs, OSM-Postleitzahlen, OePNV und Unfallatlas-Daten.
+Wohnort-Kompass ist ein Monorepo fuer einen datenbasierten Wohnortvergleich fuer Gemeinden in Deutschland. Das Projekt kombiniert:
+
+- ein `FastAPI`-Backend mit `SQLModel`, `Alembic` und `PostGIS`
+- eine `Nuxt 3`-Web-App mit Finder, Ranking, Vergleich und Regionsdetailseiten
+- mehrere ETL-Jobs fuer BKG, Destatis, DWD, UBA, OSM, OSM-Postleitzahlen, OePNV und Unfallatlas
 
 ## Inhalt
 
-- [Wohnortkompass](#wohnortkompass)
+- [Wohnort-Kompass](#wohnort-kompass)
   - [Inhalt](#inhalt)
   - [Ueberblick](#ueberblick)
-  - [Projektstruktur](#projektstruktur)
+  - [Architektur](#architektur)
+    - [Backend](#backend)
+    - [Frontend](#frontend)
+    - [Datenbank](#datenbank)
+  - [Repo-Struktur](#repo-struktur)
   - [Voraussetzungen](#voraussetzungen)
   - [Lokales Setup](#lokales-setup)
     - [1. Datenbank starten](#1-datenbank-starten)
     - [2. Backend einrichten](#2-backend-einrichten)
     - [3. Frontend einrichten](#3-frontend-einrichten)
-  - [Umgebungsvariablen](#umgebungsvariablen)
-    - [Backend](#backend)
-    - [Frontend](#frontend)
-  - [Datenquellen und ETL](#datenquellen-und-etl)
-    - [BKG VG25](#bkg-vg25)
+  - [Konfiguration](#konfiguration)
+    - [Backend](#backend-1)
+    - [Frontend](#frontend-1)
+  - [ETL und Datenquellen](#etl-und-datenquellen)
+    - [BKG](#bkg)
     - [Destatis / Regionalstatistik](#destatis--regionalstatistik)
     - [DWD](#dwd)
     - [UBA](#uba)
     - [Unfallatlas](#unfallatlas)
     - [OSM](#osm)
     - [OSM-Postleitzahlen](#osm-postleitzahlen)
-  - [Lizenz und Attribution](#lizenz-und-attribution)
-    - [OpenStreetMap](#openstreetmap)
-    - [BKG VG25](#bkg-vg25-1)
-    - [Destatis / Regionalstatistik / GENESIS](#destatis--regionalstatistik--genesis)
-    - [DWD](#dwd-1)
-    - [Umweltbundesamt](#umweltbundesamt)
-    - [Unfallatlas](#unfallatlas-1)
-    - [GTFS-Datenquellen aus OpenData OePNV](#gtfs-datenquellen-aus-opendata-oepnv)
-  - [Praktische Empfehlung fuer das Projekt](#praktische-empfehlung-fuer-das-projekt)
     - [OePNV](#oepnv)
+    - [Score-Build](#score-build)
   - [API](#api)
-  - [Frontend](#frontend-1)
-  - [Datenbank und Persistenz](#datenbank-und-persistenz)
-  - [Bekannte Besonderheiten](#bekannte-besonderheiten)
-  - [Lizenz und Attribution](#lizenz-und-attribution-1)
+  - [Frontend](#frontend-2)
+  - [Entwicklung und Qualitaet](#entwicklung-und-qualitaet)
+    - [Backend](#backend-2)
+    - [Frontend](#frontend-3)
+    - [CI](#ci)
+  - [Betriebshinweise](#betriebshinweise)
+    - [Schema-Disziplin](#schema-disziplin)
+    - [ETL-Auditing](#etl-auditing)
+    - [Logs](#logs)
+    - [Datenverzeichnisse](#datenverzeichnisse)
+    - [Tile- und Kartenhinweis](#tile--und-kartenhinweis)
+  - [Lizenz und Attribution](#lizenz-und-attribution)
+  - [Praktische Empfehlung](#praktische-empfehlung)
 
 ## Ueberblick
 
-Das System besteht aus drei Hauptteilen:
+Die Anwendung berechnet Scores fuer sieben Kategorien:
 
-1. `backend`
-   FastAPI, SQLModel, Alembic und die ETL-Jobs.
-2. `frontend`
-   Nuxt 3 mit Kartenansichten, Finder, Vergleich und Regions-Detailseiten.
-3. `infra`
-   Lokale PostGIS-Datenbank per Docker Compose.
+- `climate`
+- `air`
+- `safety`
+- `demographics`
+- `amenities`
+- `landuse`
+- `oepnv`
 
-Die App arbeitet gemeindescharf, soweit die jeweiligen Quellen das hergeben. Geometrien kommen lokal aus BKG VG25, Demografie aus der Regionalstatistik, OSM-Alltagsnaehe aus `osm2pgsql`, OePNV aus GTFS und Unfallorte aus dem Unfallatlas.
+Auf Basis dieser Teilscores entstehen:
 
-## Projektstruktur
+- ein neutraler Gesamtscore pro Region
+- ein personalisierter Profilscore auf Basis der Finder-Gewichte
+- Top-100-Rankings je Kategorie und Bundesland
+- Vergleichsansichten fuer bis zu drei Regionen
+
+Der aktuelle Stand des Projekts umfasst unter anderem:
+
+- Coverage-Felder je Kategorie statt Missing-Data-als-`0`
+- trust-/qualitaetsnahe UI-Hinweise fuer Coverage, Frische und Proxy-Flags
+- serverseitigen Regions-Autocomplete fuer Gemeinde, PLZ oder AGS
+- URL-state fuer Finder und Ranking
+- ETL-Run-Auditing
+- strukturierte JSON-Logs
+- Schema-Drift-Checks beim App-Start
+
+## Architektur
+
+### Backend
+
+Das Backend liegt unter `backend/` und stellt die API unter `/api/v1` bereit.
+
+Wichtige Schichten:
+
+- `app/api/routes`
+  FastAPI-Endpunkte
+- `app/services`
+  fachliche Logik fuer Scoring, Regionen und Erklaertexte
+- `app/repositories`
+  Datenbankzugriffe
+- `app/models`
+  SQLModel-Tabellen
+- `app/schemas`
+  API-Response- und Request-Modelle
+- `app/etl`
+  Import- und Materialisierungsjobs
+
+Besonderheiten:
+
+- Das Backend fuehrt keine Runtime-DDL mehr aus.
+- Beim Start wird das DB-Schema geprueft.
+- Wenn Migrationen fehlen, startet die App bewusst nicht.
+
+### Frontend
+
+Das Frontend liegt unter `frontend/` und basiert auf `Nuxt 3`, `Pinia`, `Tailwind CSS` und `Leaflet`.
+
+Zentrale Seiten:
+
+- `/finder`
+  Gewichtungen festlegen
+- `/results`
+  personalisierte Empfehlungen
+- `/compare`
+  neutraler Vergleich von bis zu drei Regionen
+- `/region/[slug]`
+  Detailansicht mit Scores, Quellen, Datenbasis, Karten und Stationen
+- `/top-100/[stateCode]/[category]`
+  Top-100-Listen je Kategorie
+- `/methodik`
+  Datenquellen und fachliche Einordnung
+
+### Datenbank
+
+Die lokale Entwicklungsumgebung nutzt `postgis/postgis:16-3.4`.
+
+Wichtige Tabellen und Schemas:
+
+- `region`
+- `region_score_snapshot`
+- `region_indicator_value`
+- `indicator_definition`
+- `geo.municipality_boundary`
+- `postal.region_postal_code`
+- `postal.postal_area_stage`
+- `climate.region_climate_station`
+- `etl_run`
+- `etl_run_source`
+
+## Repo-Struktur
 
 ```text
 open-living-map/
@@ -67,27 +155,22 @@ open-living-map/
 │   │   ├── schemas/
 │   │   └── services/
 │   ├── migrations/
+│   ├── tests/
 │   ├── pyproject.toml
 │   └── .env.example
 ├── frontend/
 │   ├── components/
 │   ├── composables/
 │   ├── pages/
+│   ├── server/routes/
 │   ├── stores/
 │   ├── types/
-│   ├── nuxt.config.ts
+│   ├── package.json
 │   └── .env.example
 ├── infra/
 │   └── docker-compose.yml
 └── README.md
 ```
-
-Zusatzdaten werden ausserhalb des App-Codes unter `../data/` gespeichert:
-
-- `data/raw`
-  heruntergeladene Rohdaten wie BKG, DWD, GTFS, Unfallatlas, OSM-PBF
-- `data/staging`
-  temporaere ETL-Artefakte
 
 ## Voraussetzungen
 
@@ -95,8 +178,8 @@ Zusatzdaten werden ausserhalb des App-Codes unter `../data/` gespeichert:
 - Node.js `20+`
 - `pnpm`
 - Docker + Docker Compose
-- `ogr2ogr` aus GDAL fuer den BKG-VG25-Import
-- optional `osm2pgsql` fuer OSM-Rohimporte
+- `ogr2ogr` aus GDAL fuer den BKG-Import
+- optional `osm2pgsql` fuer den OSM-Rohimport
 
 ## Lokales Setup
 
@@ -107,7 +190,7 @@ cd infra
 docker compose up -d
 ```
 
-Die Datenbank ist danach unter `localhost:5433` verfuegbar.
+Standardmaessig laeuft PostGIS danach auf `localhost:5433`.
 
 ### 2. Backend einrichten
 
@@ -117,14 +200,14 @@ python -m venv venv
 source venv/bin/activate
 pip install -e .
 cp .env.example .env
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+./venv/bin/alembic upgrade head
+./venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
-Backend-Standardadresse:
+Backend:
 
-- `http://localhost:8000`
-- API-Basis: `http://localhost:8000/api/v1`
+- App: `http://localhost:8000`
+- API: `http://localhost:8000/api/v1`
 
 ### 3. Frontend einrichten
 
@@ -135,71 +218,94 @@ cp .env.example .env
 pnpm dev
 ```
 
-Frontend-Standardadresse:
+Frontend:
 
-- `http://localhost:3000`
+- App: `http://localhost:3000`
 
-Die Nuxt-App spricht standardmaessig mit:
-
-- `NUXT_PUBLIC_API_BASE=http://localhost:8000/api/v1`
-
-## Umgebungsvariablen
+## Konfiguration
 
 ### Backend
 
-Wichtige Variablen aus `backend/.env.example`:
+Die wichtigsten Variablen stehen in [backend/.env.example](backend/.env.example).
+
+Wesentliche Schalter:
 
 - `DATABASE_URL`
-  SQLAlchemy/psycopg-Verbindung zur PostGIS-Datenbank
+  Datenbankverbindung
+- `API_PREFIX`
+  Standard: `/api/v1`
+- `CORS_ALLOW_ORIGINS`
+  lokale Nuxt-Origin(s)
+- `RAW_DATA_DIR`
+  Rohdatenverzeichnis
+- `STAGING_DATA_DIR`
+  Staging-/Zwischendaten
 - `GENESIS_USERNAME`, `GENESIS_PASSWORD`
-  Zugang zur Regionalstatistik/GENESIS
-- `GENESIS_API_URL`
-  standardmaessig Regionalstatistik REST `data/table`
-- `BKG_MUNICIPALITY_TABLE`
-  lokale BKG-Gemeindetabelle, standardmaessig `public.vg25_gem`
-- `BKG_GEOMETRY_COLUMN`
-  Geometriespalte der BKG-Tabelle, standardmaessig `geom`
-- `BKG_GEOMETRY_FLAVOUR`
-  bevorzugter `gf`-Wert fuer BKG-Geometrien
-- `OEPNV_GTFS_URLS`
-  komma-separierte GTFS-ZIP-Quellen
+  Zugang fuer Destatis/Regionalstatistik
+- `DWD_BASE_URL`
+  DWD Daily KL
 - `DWD_MAX_STATIONS`
-  optionales Limit fuer Testlaeufe
+  optionales Stationslimit fuer Testlaeufe
+- `DWD_RECENT_CACHE_MAX_AGE_HOURS`
+  Refresh-Fenster fuer lokale DWD-`recent`-Dateien
+- `UBA_API_BASE`
+  Umweltbundesamt-API
+- `BKG_MUNICIPALITY_TABLE`
+  lokale BKG-Gemeindetabelle
+- `BKG_GEOMETRY_COLUMN`
+  Geometriespalte der BKG-Tabelle
+- `BKG_GEOMETRY_FLAVOUR`
+  bevorzugter BKG-`gf`-Wert
+- `OEPNV_GTFS_URLS`
+  komma-separierte GTFS-Quellen
+- `OEPNV_HTTP_USERNAME`, `OEPNV_HTTP_PASSWORD`
+  optional fuer geschuetzte GTFS-Endpunkte
 
 ### Frontend
 
-Aus `frontend/.env.example`:
+Die wichtigsten Variablen stehen in [frontend/.env.example](frontend/.env.example).
+
+Wesentliche Schalter:
 
 - `NUXT_PUBLIC_API_BASE`
   Basis-URL der API
+- `NUXT_PUBLIC_SITE_URL`
+  oeffentliche Basis-URL
+- `NUXT_PUBLIC_REPO_URL`
+  Repository-Link fuer Footer und SEO
+- `NUXT_PUBLIC_LEGAL_*`
+  Inhalte fuer Impressum und Datenschutz
 
-## Datenquellen und ETL
+## ETL und Datenquellen
 
-Die ETL-Jobs sitzen unter `backend/app/etl`.
+Die ETL-Jobs liegen unter `backend/app/etl`.
 
 Typische Reihenfolge:
 
 ```bash
 cd backend
-python -m app.etl.import_bkg
-python -m app.etl.import_destatis
-python -m app.etl.import_dwd
-python -m app.etl.import_uba
-python -m app.etl.import_unfallatlas
-python -m app.etl.import_osm
-python -m app.etl.import_postal_codes
-python -m app.etl.import_oepnv
-python -m app.etl.build_scores
+./venv/bin/python -m app.etl.import_bkg
+./venv/bin/python -m app.etl.import_destatis
+./venv/bin/python -m app.etl.import_dwd
+./venv/bin/python -m app.etl.import_uba
+./venv/bin/python -m app.etl.import_unfallatlas
+./venv/bin/python -m app.etl.import_osm
+./venv/bin/python -m app.etl.import_postal_codes
+./venv/bin/python -m app.etl.import_oepnv
+./venv/bin/python -m app.etl.build_scores
 ```
 
-### BKG VG25
+### BKG
 
-`import_bkg` erwartet eine lokal importierte Gemeindetabelle in PostGIS. Standard:
+`import_bkg` erwartet eine lokal importierte Gemeindetabelle, standardmaessig `public.vg25_gem`.
 
-- Tabelle: `public.vg25_gem`
-- Geometriespalte: `geom`
+Der Job:
 
-Minimaler Import:
+- materialisiert Gemeinden nach `region`
+- schreibt Gemeindegrenzen nach `geo.municipality_boundary`
+- pflegt `district_name`, `slug`, `wikidata_*`, `wikipedia_url`
+
+Beispiel fuer einen lokalen Import mit GDAL:
 
 ```bash
 ogr2ogr -f "PostgreSQL" \
@@ -209,302 +315,280 @@ ogr2ogr -f "PostgreSQL" \
   -t_srs EPSG:4326 -nlt MULTIPOLYGON -overwrite -update
 ```
 
-Empfohlene Indizes:
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_vg25_gem_ags ON vg25_gem (ags);
-CREATE INDEX IF NOT EXISTS idx_vg25_gem_gf ON vg25_gem (gf);
-CREATE INDEX IF NOT EXISTS idx_gem_sn_k ON vg25_gem (sn_k);
-CREATE INDEX IF NOT EXISTS idx_gem_sn_r ON vg25_gem (sn_r);
-CREATE INDEX IF NOT EXISTS idx_gem_sn_l ON vg25_gem (sn_l);
-```
-
-Was `import_bkg` macht:
-
-- liest Gemeinden aus der lokalen BKG-Tabelle
-- schreibt `region`
-- schreibt Grenzen nach `geo.municipality_boundary`
-- reichert Regionen mit `wikidata_id`, `wikidata_url`, `wikipedia_url` an
-- nutzt XRepository als Referenz fuer den AGS-Schluesselraum
-
 ### Destatis / Regionalstatistik
 
-`import_destatis` zieht gemeindescharfe Demografie aus der Regionalstatistik.
+`import_destatis` verarbeitet gemeindescharfe Demografie und verwandte Indikatoren aus der Regionalstatistik / GENESIS.
 
-Aktuell werden insbesondere diese Kategorien gepflegt:
+Aktuell genutzt werden unter anderem:
 
-- Gesamtbevoelkerung
+- Einwohner gesamt
 - Frauenanteil
 - Anteil unter 18 Jahren
 - Anteil ab 65 Jahren
 
-Besonderheiten:
-
-- Der Import kann grosse Tabellen ueber den GENESIS-Jobmechanismus im Hintergrund laden.
-- Bei fehlender BKG-Einwohnerspalte wird `region.population` aus `population_total_destatis` nachgefuehrt.
-- Kreisfreie Staedte werden ueber die speziellen Regionalstatistik-Codes ebenfalls gemappt.
-
 ### DWD
 
-`import_dwd` verarbeitet echte DWD-Tageswerte.
+`import_dwd` verarbeitet aktuelle DWD-Tageswerte fuer das Daily-KL-Produkt.
 
-Beispiele:
+Abgeleitete Indikatoren:
 
 - Hitzetage
 - Sommertage
-- Niederschlags-Proxies
+- Niederschlag
+
+Wichtig:
+
+- es werden rollierende Kennzahlen auf Basis aktueller DWD-`recent`-Dateien gebildet
+- `recent`-ZIPs werden lokal zwischengespeichert
+- ein Re-Download erfolgt, wenn die Datei fehlt oder aelter als `DWD_RECENT_CACHE_MAX_AGE_HOURS` ist
+- fuer Regionen wird die naechstgelegene DWD-Station dokumentiert und in der Detailseite angezeigt
 
 ### UBA
 
-`import_uba` zieht Luftqualitaetsdaten, u. a.:
+`import_uba` verarbeitet Luftqualitaetsdaten des Umweltbundesamts.
+
+Aktuell genutzt werden:
 
 - `NO2`
 - `PM10`
 - `PM2.5`
 
+Die Detailseite zeigt die zugeordnete Luftmessstation inklusive Stationsname und UBA-Seitenlink.
+
 ### Unfallatlas
 
-`import_unfallatlas` laedt das neueste Unfallatlas-CSV-ZIP und verarbeitet es jetzt gemeindescharf.
-
-Aktuell:
-
-- aggregierter Sicherheitsindikator `road_accidents_total`
-- Unfallpunkte als GeoJSON-Grundlage in `traffic.accident_point`
-- Kategorien technisch auf Englisch:
-  - `killed`
-  - `seriously_injured`
-  - `slightly_injured`
-- Frontend-Labels bleiben deutsch:
-  - `Getoetete`
-  - `Schwerverletzte`
-  - `Leichtverletzte`
+`import_unfallatlas` verarbeitet Unfallorte und daraus abgeleitete Sicherheitsindikatoren.
 
 ### OSM
 
-`import_osm` nutzt `osm2pgsql`-Tabellen und Gemeindegrenzen, um Alltagsnaehe zu aggregieren.
+`import_osm` verarbeitet alltagsrelevante POIs und weitere OSM-basierte Informationen.
+
+Genutzt werden unter anderem:
+
+- Alltagsnaehe / Amenity-Dichten
+- POI-Overlays fuer die Karten
+- materialisierte `amenity_poi_stage`-Tabellen fuer schnellere Regionsabfragen
 
 ### OSM-Postleitzahlen
 
-`import_postal_codes` nutzt lokal importierte OSM-Postleitzahlgebiete aus `osm.planet_osm_polygon`.
+`import_postal_codes` materialisiert OSM-Postleitzahlflaechen und mappt sie auf Gemeinden.
 
-Was der Import macht:
+Ziel:
 
-- liest OSM-Polygone mit `boundary=postal_code`
-- extrahiert die 5-stellige PLZ aus `postal_code` oder `addr:postcode`
-- mappt die PLZ-Flaechen per raeumlichem Join auf `geo.municipality_boundary`
-- schreibt die Gemeinde-PLZ-Zuordnung nach `postal.region_postal_code`
+- Suche nach PLZ, Gemeindename oder AGS/ARS
+- exakte 5-stellige PLZ werden auf eine primaere Gemeinde gemappt
+- unscharfe PLZ- oder Namenssuchen koennen mehrere Treffer liefern
 
-Wofuer das genutzt wird:
+Technisch:
 
-- Header-Suche
-- Compare-Suche
-- API-Suche `/api/v1/regions/search/autocomplete`
-
-Die Suche akzeptiert damit:
-
-- Gemeindename
-- AGS
-- PLZ
-
-Hinweis:
-
-- eine PLZ kann mehreren Gemeinden zugeordnet sein
-- in diesem Fall liefert die Suche mehrere fachlich korrekte Gemeindetreffer
-
-## Lizenz und Attribution
-
-Bitte die Lizenz- und Attributionspflichten der eingebundenen Datenquellen beachten. Die folgende Uebersicht beschreibt den aktuell verwendeten Stand der im Projekt genutzten Quellen. Im Zweifel gilt immer die Lizenzangabe direkt am konkreten Datensatz oder Dienst.
-
-### OpenStreetMap
-
-- Lizenz: `Open Data Commons Open Database License (ODbL) 1.0`
-- Mindestattribution: `© OpenStreetMap-Mitwirkende`
-- Zusaetzlich muss kenntlich gemacht werden, dass die Daten unter ODbL stehen.
-- Quelle:
-  - https://www.openstreetmap.org/copyright
-
-### BKG VG25
-
-- Datensatz: `Verwaltungsgebiete 1:25 000 (VG25)`
-- Lizenz: `CC BY 4.0`
-- Quellenvermerk laut BKG:
-  - `© BKG (Jahr des letzten Datenbezugs) CC BY 4.0, Datenquellen: https://sgx.geodatenzentrum.de/web_public/gdz/datenquellen/datenquellen_vg25.pdf`
-- Bei veraenderten Daten ist ein Veraenderungshinweis anzubringen.
-- Quellen:
-  - https://gdz.bkg.bund.de/index.php/default/digitale-geodaten/verwaltungsgebiete/verwaltungsgebiete-1-25-000-stand-31-12-vg25.html
-  - https://www.bkg.bund.de
-
-### Destatis / Regionalstatistik / GENESIS
-
-- Lizenz: `Datenlizenz Deutschland – Namensnennung – Version 2.0`
-- Kurzform: `dl-de/by-2-0`
-- Empfohlener Quellenvermerk:
-  - `Datenquelle: Statistisches Bundesamt (Destatis), Genesis-Online, <Abrufdatum>; Datenlizenz by-2-0`
-- Bei eigener Berechnung oder Darstellung sollte dies im Quellenvermerk kenntlich gemacht werden.
-- Quellen:
-  - https://www.destatis.de/DE/Service/OpenData/genesis-api-webservice-oberflaeche.html
-  - https://www.destatis.de/DE/Service/Impressum/copyright-genesis-online.html
-
-### DWD
-
-- Fuer die im Projekt genutzten DWD-Open-Data- bzw. CDC-Daten ist `CC BY 4.0` dokumentiert.
-- Empfohlene Attribution: `Quelle: Deutscher Wetterdienst (DWD)`
-- Die konkrete Datensatzdokumentation des jeweils genutzten Open-Data-Produkts ist zusaetzlich zu beachten.
-- Quellen:
-  - https://opendata.dwd.de/climate_environment/REA/Nutzungsbedingungen_German.pdf
-  - https://www.dwd.de/EN/ourservices/cdc/cdc.html
-
-### Umweltbundesamt
-
-- UBA unterscheidet zwischen Website-Inhalten und bereitgestellten Daten.
-- Website-Texte, Grafiken und Medien stehen, soweit nicht anders gekennzeichnet, unter `CC BY-NC-ND 4.0`.
-- Fuer bereitgestellte Daten und Metadaten weist das UBA ausdruecklich auf deren zulaessige Nutzung hin; massgeblich bleiben die Bedingungen des jeweiligen Datenangebots.
-- Empfehlung fuer das Projekt:
-  - Datenseitige Attribution immer direkt am konkret verwendeten UBA-Dienst oder Datensatz pruefen.
-  - Website-Lizenz nicht pauschal auf die Fachdaten uebertragen.
-- Quelle:
-  - https://luftdaten.umweltbundesamt.de/datenschutz-haftung-und-urheberrecht
-
-### Unfallatlas
-
-- Die Unfallatlas-Daten werden als Open Data ueber das Statistikportal bereitgestellt.
-- Die Open-Data-Seiten des Statistikportals verweisen fuer statistische Daten allgemein auf die `Datenlizenz Deutschland 2.0`.
-- Bei kartografischen Anwendungen koennen fuer zusaetzliche Geobasisdaten gesonderte Lizenzhinweise gelten.
-- Da der Unfallatlas als Statistikportal-Open-Data-Angebot beschrieben ist, ist `dl-de/by-2-0` hier die naheliegende Lizenzgrundlage.
-- Quellen:
-  - https://www.statistikportal.de/de/karten/unfallatlas
-  - https://www.statistikportal.de/de/open-data
-
-Hinweis: Die konkrete Open-Data-Downloadseite des Unfallatlas sollte bei produktiver Veroeffentlichung nochmals auf einen expliziten Lizenztext geprueft werden.
-
-### GTFS-Datenquellen aus OpenData OePNV
-
-- Das Portal `OpenData OePNV` hat keine einheitliche Datenlizenz fuer alle Datensaetze.
-- Laut Portal ist fuer die Lizenzierung jeweils der konkrete Datenanbieter zustaendig.
-- Fuer den im Projekt verwendeten deutschlandweiten `DELFI GTFS`-Datensatz ist aktuell `Creative Commons Namensnennung (CC-BY)` angegeben.
-- Quellen:
-  - https://www.opendata-oepnv.de/ht/de/standards/nutzungsbedingungen
-  - https://www.opendata-oepnv.de/ht/de/organisation/delfi/startseite?cHash=af4be4c0a9de59953fb9ee2325ef818f&tx_vrrkit_view%5Baction%5D=details&tx_vrrkit_view%5Bcontroller%5D=View&tx_vrrkit_view%5Bdataset_name%5D=deutschlandweite-sollfahrplandaten-gtfs
-  - https://www.opendata-oepnv.de/ht/de/standards/uebersicht-der-verwendeten-lizenzen
-
-## Praktische Empfehlung fuer das Projekt
-
-Bei jeder oeffentlichen Ausspielung sollten mindestens folgende Quellenhinweise sichtbar oder in einer Methodik-/Impressumsseite verlinkt sein:
-
-- `© OpenStreetMap-Mitwirkende, ODbL 1.0`
-- `© BKG <Jahr des letzten Datenbezugs>, CC BY 4.0`
-- `Datenquelle: Statistisches Bundesamt (Destatis), Genesis-Online, dl-de/by-2-0`
-- `Quelle: Deutscher Wetterdienst (DWD)`
-- `Quelle: Umweltbundesamt (je nach Datensatz/Dienst)`
-- `Quelle: Statistische Aemter des Bundes und der Laender / Unfallatlas`
-- `Quelle: DELFI / OpenData OePNV, gemaess Datensatzlizenz`
-
-Unterstuetzte Kategorien:
-
-- `pharmacy`
-- `doctors`
-- `childcare`
-- `school`
-- `supermarket`
-- `station`
-- `transit_stop`
-- `playground`
-- `park`
-
-Ergebnisse:
-
-- Aggregattabelle `osm.region_amenity_agg`
-- Indikator `amenities_density`
-- klickbare GeoJSON-POIs je Kategorie auf der Regionsseite
+- `postal.postal_area_stage` als vorgelagerte Stage fuer PLZ-Flaechen
+- `postal.region_postal_code` als Zuordnungstabelle
+- GiST-Indizes fuer den raeumlichen Join
 
 ### OePNV
 
-`import_oepnv` verarbeitet GTFS und schreibt u. a.:
+`import_oepnv` verarbeitet GTFS-Daten.
 
-- `oepnv_stop_density`
-- `oepnv_departures_per_10k`
-- `oepnv_departure_regularity`
+Aktuell genutzte OePNV-Indikatoren:
+
+- Haltestellendichte
+- Abfahrten je 10.000 Einwohner
+- Angebotsmasse
+- Abfahrtsregelmaessigkeit
+
+Die OePNV-Kategorie ist fachlich intern gewichtet und nicht mehr nur ein einfacher Mittelwert.
+
+### Score-Build
+
+`build_scores` berechnet aus den materialisierten Indikatoren:
+
+- Kategoriescores
+- neutralen Gesamtscore
+- Coverage-Felder je Kategorie
+
+Fehlende Kategorien werden dabei nicht mehr pauschal als `0` gewertet.
 
 ## API
 
-Basis:
+Wichtige Endpunkte:
 
 - `GET /api/v1/health`
 - `GET /api/v1/regions`
-- `GET /api/v1/regions/{ars-or-slug}`
-- `POST /api/v1/recommendations`
-- `GET /api/v1/compare?ars=...`
-- `GET /api/v1/metadata/indicators`
-
-Interaktive Karten-Endpunkte:
-
+- `GET /api/v1/regions/search/autocomplete`
+- `GET /api/v1/regions/state-boundaries`
+- `GET /api/v1/regions/{ars}`
 - `GET /api/v1/regions/{ars}/amenities/{category}`
 - `GET /api/v1/regions/{ars}/accidents/{category}`
+- `POST /api/v1/recommendations`
+- `GET /api/v1/compare?ars=...`
+- `GET /api/v1/rankings/top/{category}`
+- `GET /api/v1/rankings/top/{state_code}/{category}`
+- `GET /api/v1/metadata/indicators`
 
 Beispiele:
 
-- `/api/v1/regions/kiel/amenities/pharmacy`
-- `/api/v1/regions/flensburg/accidents/slightly_injured`
-
-Die API verwendet fuer technische Kategorien bewusst englische Keys. Die Uebersetzung in deutsch passiert im Frontend.
+```bash
+curl 'http://localhost:8000/api/v1/regions/search/autocomplete?q=24937&limit=8'
+curl 'http://localhost:8000/api/v1/regions/01001000'
+curl 'http://localhost:8000/api/v1/compare?ars=01001000,01059113,08116053'
+```
 
 ## Frontend
 
-Die Nuxt-App bietet aktuell:
+Wichtige Frontend-Eigenschaften:
 
-- Landing Page
-- Finder / Empfehlungen
-- Vergleich
-- Methodik-Seite
-- Regions-Detailseiten mit:
-  - Gesamt- und Teil-Scores
-  - Demografie-Block
-  - OSM-Alltagsnaehe-Block
-  - Verkehrsunfall-Block
-  - Gemeindegrenze auf Leaflet-Karte
-  - klickbare OSM-POIs auf der Karte
-  - klickbare Unfallpunkte auf der Karte
+- Finder und Ranking-Zustand sind ueber Query-Parameter teilbar
+- Compare nutzt Pinia und URL-State
+- Regionsdetailseiten zeigen:
+  - Scores
+  - Datenbasis und Aktualitaet
+  - Qualitaets- und Proxy-Hinweise
+  - Luft- und Klimastationen
+  - thematische Kartenlayer
+- Suche im Header arbeitet serverseitig ueber Autocomplete
 
-Wichtige Dateien:
+## Entwicklung und Qualitaet
 
-- `frontend/pages/index.vue`
-- `frontend/pages/finder.vue`
-- `frontend/pages/compare.vue`
-- `frontend/pages/methodik.vue`
-- `frontend/pages/region/[slug].vue`
+### Backend
 
-## Datenbank und Persistenz
+Installieren:
 
-Zentrale Tabellen und Schemata:
+```bash
+cd backend
+pip install -e .
+```
 
-- `region`
-- `indicator_definition`
-- `region_indicator_value`
-- `region_score_snapshot`
-- `geo.municipality_boundary`
-- `osm.region_amenity_agg`
-- `traffic.accident_point`
+Nutzt:
 
-Docker Compose startet standardmaessig:
+- `ruff`
+- `pytest`
+- `alembic`
 
-- PostGIS 16 / PostGIS 3.4
-- DB: `wohnortkompass`
-- User: `wohnortkompass`
-- Port: `5433`
+Wichtige Checks:
 
-## Bekannte Besonderheiten
+```bash
+cd backend
+ruff check .
+python -m py_compile $(find . -name '*.py' -type f)
+pytest
+alembic upgrade head
+```
 
-- Einige Quellen sind langsam oder erfordern Zugangsdaten, insbesondere Destatis/Regionalstatistik.
-- Nicht jede BKG-Lieferung enthaelt Einwohnerfelder. In diesem Fall wird die Gesamtbevoelkerung aus Destatis nachgezogen.
+Vorhandene Tests:
+
+- `backend/tests/etl/test_import_bkg.py`
+- `backend/tests/etl/test_import_destatis.py`
+- `backend/tests/etl/test_import_dwd.py`
+- `backend/tests/etl/test_import_flaechenatlas.py`
+
+### Frontend
+
+Wichtige Checks:
+
+```bash
+cd frontend
+pnpm install
+pnpm run typecheck
+pnpm run build
+```
+
+### CI
+
+Die GitHub-Actions-Pipeline unter [.github/workflows/ci.yml](.github/workflows/ci.yml) fuehrt aus:
+
+- Backend-Lint
+- Python-Syntaxcheck
+- `pytest`
+- Alembic-Check
+- Import-Smoke-Checks
+- Frontend-Typecheck
+- Frontend-Build
+
+## Betriebshinweise
+
+### Schema-Disziplin
+
+Die Anwendung startet nur, wenn das DB-Schema zum Code passt.
+
+Wenn die App mit `SchemaDriftError` abbricht:
+
+```bash
+cd backend
+./venv/bin/alembic upgrade head
+```
+
+Wichtige Regel:
+
+- Schema-Aenderungen ausschliesslich per Alembic
+- keine Runtime-DDL
+- bereits ausgefuehrte Migrationen nicht nachtraeglich erweitern
+
+### ETL-Auditing
+
+Wichtige ETLs schreiben Run-Metadaten nach:
+
+- `etl_run`
+- `etl_run_source`
+
+Damit sind Start, Ende, Status, Fehltext und grobe `rows_written` nachvollziehbar.
+
+### Logs
+
+Backend und ETLs loggen strukturiert im JSON-Format.
+
+API-Requests enthalten unter anderem:
+
+- `request_id`
+- `method`
+- `path`
+- `status_code`
+- `duration_ms`
+
+### Datenverzeichnisse
+
+Roh- und Staging-Daten werden ueber `RAW_DATA_DIR` und `STAGING_DATA_DIR` konfiguriert.
+
+Standard in [backend/.env.example](backend/.env.example):
+
+- `RAW_DATA_DIR=../../data/raw`
+- `STAGING_DATA_DIR=../../data/staging`
+
+Wenn du diese Defaults uebernimmst, liegen die Daten ausserhalb von `backend/` und `frontend/`.
+
+### Tile- und Kartenhinweis
+
+Die Anwendung nutzt Leaflet und externe Kartentiles. Eine ausgearbeitete Tile-Provider-Strategie ist noch kein abgeschlossener Teil des Repos und sollte vor produktivem Betrieb sauber dokumentiert und abgesichert werden.
 
 ## Lizenz und Attribution
 
-Bitte die Lizenz- und Attributionspflichten der eingebundenen Datenquellen beachten, insbesondere:
+Dieses Repo vereint Daten aus verschiedenen Quellen mit jeweils eigenen Lizenz- und Nutzungsbedingungen. Vor oeffentlichem Betrieb solltest du die Bedingungen der verwendeten Quellen pruefen und korrekt ausweisen.
 
-- OpenStreetMap / ODbL
+Wesentliche Quellen:
+
+- OpenStreetMap
 - BKG VG25
-- Destatis / Regionalstatistik
-- DWD
+- Destatis / Regionalstatistik / GENESIS
+- Deutscher Wetterdienst
 - Umweltbundesamt
-- Unfallatlas
-- GTFS-Datenquellen aus OpenData-OePNV
+- Unfallatlas / Destatis
+- GTFS-Feeds aus OpenData OePNV
+
+Fuer OSM gilt insbesondere:
+
+- Daten: `ODbL`
+- Karten-/Tile-Nutzung: eigene Nutzungsbedingungen des gewaehlten Tile-Providers beachten
+
+## Praktische Empfehlung
+
+Wenn du lokal von null startest, ist das die stabilste Reihenfolge:
+
+1. PostGIS starten
+2. Backend-Dependencies installieren
+3. `alembic upgrade head`
+4. BKG-Gemeindetabelle lokal importieren
+5. ETLs in der empfohlenen Reihenfolge ausfuehren
+6. `build_scores` laufen lassen
+7. Backend starten
+8. Frontend starten
+
+Damit hast du einen konsistenten Stand fuer Finder, Ranking, Compare, Top-100 und Regionsdetailseiten.

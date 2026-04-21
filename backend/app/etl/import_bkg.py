@@ -14,12 +14,14 @@ from sqlmodel import Session, select
 from app.core.ars import normalize_ars, slugify_region_name
 from app.core.config import settings
 from app.core.db import engine, check_schema_drift
+from app.core.logging import configure_logging
+from app.etl.common import tracked_etl_run
 from app.models.indicator import RegionIndicatorValue
 from app.models.region import Region
 from app.models.score import RegionScoreSnapshot
 
+configure_logging()
 logger = logging.getLogger("etl.import_bkg")
-logging.basicConfig(level=logging.INFO)
 
 BKG_WFS_URL = "https://sgx.geodatenzentrum.de/wfs_vg250-ew"
 XREPOSITORY_AGS_URN = "urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:ags"
@@ -1054,36 +1056,45 @@ def fetch_bkg_regions() -> list[dict[str, object]]:
 
 def main() -> None:
     logger.info("BKG-Import gestartet (Ziel: alle Gemeinden per AGS)")
-    ags_reference = fetch_xrepository_ags_metadata()
-    if ags_reference:
-        logger.info(
-            "AGS-Referenz aus XRepository geladen (urn=%s, version=%s)",
-            ags_reference["urn"],
-            ags_reference["latest_version"] or ags_reference["latest_version_urn"],
-        )
-    if not check_schema_drift():
-        logger.warning(
-            "Schema drift detected during BKG import. Import may fail or produce incorrect results. "
-            "Run alembic migrations to fix schema issues."
-        )
-    rows = fetch_bkg_regions()
-    if not rows:
-        logger.error(
-            "BKG-WFS Gemeindeimport fehlgeschlagen. Keine Demo-Daten mehr als Fallback.")
-        return
-    enrich_rows_with_wikidata(rows)
+    with tracked_etl_run(
+        job_name="import_bkg",
+        sources=[
+            {"source_name": "BKG WFS", "source_url": BKG_WFS_URL},
+            {"source_name": "XRepository AGS", "source_url": XREPOSITORY_AGS_DETAILS_URL},
+            {"source_name": "XRepository Kreis", "source_url": XREPOSITORY_KREIS_DETAILS_URL},
+        ],
+    ) as run:
+        ags_reference = fetch_xrepository_ags_metadata()
+        if ags_reference:
+            logger.info(
+                "AGS-Referenz aus XRepository geladen (urn=%s, version=%s)",
+                ags_reference["urn"],
+                ags_reference["latest_version"] or ags_reference["latest_version_urn"],
+            )
+        if not check_schema_drift():
+            logger.warning(
+                "Schema drift detected during BKG import. Import may fail or produce incorrect results. "
+                "Run alembic migrations to fix schema issues."
+            )
+        rows = fetch_bkg_regions()
+        if not rows:
+            logger.error(
+                "BKG-WFS Gemeindeimport fehlgeschlagen. Keine Demo-Daten mehr als Fallback.")
+            return
+        enrich_rows_with_wikidata(rows)
 
-    with Session(engine) as session:
-        target_ags = {str(row["ars"]) for row in rows}
-        removed = prune_non_target_regions(session, target_ags)
-        if removed:
-            logger.info("Legacy/Non-Target Regionen entfernt: %s", removed)
-        upsert_regions(session, rows)
-        logger.info("Regionen upserted, beginne mit Geometrieimport...")
-        upsert_municipality_boundaries(session, rows)
-        refresh_state_boundaries(session)
+        with Session(engine) as session:
+            target_ags = {str(row["ars"]) for row in rows}
+            removed = prune_non_target_regions(session, target_ags)
+            if removed:
+                logger.info("Legacy/Non-Target Regionen entfernt: %s", removed)
+            upsert_regions(session, rows)
+            logger.info("Regionen upserted, beginne mit Geometrieimport...")
+            upsert_municipality_boundaries(session, rows)
+            refresh_state_boundaries(session)
 
-    logger.info("BKG-Import abgeschlossen (%s Gemeinden)", len(rows))
+        run.set_rows_written(len(rows))
+        logger.info("BKG-Import abgeschlossen (%s Gemeinden)", len(rows))
 
 
 if __name__ == "__main__":

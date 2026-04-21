@@ -100,10 +100,10 @@
             <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:overflow-x-auto">
             <NuxtLink
               v-for="item in navItems"
-              :key="item.to"
+              :key="item.activePath"
               :to="item.to"
               class="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition"
-              :class="navLinkClass(item.to)"
+              :class="navLinkClass(item.activePath)"
               @click="mobileMenuOpen = false"
             >
               {{ item.label }}
@@ -137,7 +137,7 @@
         <div>
           <p class="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Navigation</p>
           <div class="mt-3 flex flex-col gap-2 text-sm">
-            <NuxtLink v-for="item in navItems" :key="`footer-${item.to}`" :to="item.to" class="text-slate-700 transition hover:text-sky-700">
+            <NuxtLink v-for="item in navItems" :key="`footer-${item.activePath}`" :to="item.to" class="text-slate-700 transition hover:text-sky-700">
               {{ item.label }}
             </NuxtLink>
           </div>
@@ -165,20 +165,30 @@
 </template>
 
 <script setup lang="ts">
+import { buildPreferenceQuery } from '~/composables/usePreferenceQuery'
 import type { Region } from '~/types/api'
+import { usePreferencesStore } from '~/stores/preferences'
 
 const { siteName, organizationName, siteDescription, siteLocale, absoluteUrl } = useSiteSeo()
 const { legal } = useLegalConfig()
 const router = useRouter()
 const route = useRoute()
+const preferencesStore = usePreferencesStore()
 const { searchRegionsAutocomplete } = useRegions()
 const repoUrl = computed(() => legal.value.repoUrl || 'https://github.com/oklabflensburg/wohnortkompass')
-const navItems = [
-  { to: '/finder', label: 'Finder' },
-  { to: '/results', label: 'Ranking' },
-  { to: '/compare', label: 'Vergleich' },
-  { to: '/methodik', label: 'Methodik' }
-]
+const navItems = computed(() => [
+  {
+    to: {
+      path: '/finder',
+      query: buildPreferenceQuery({ ...preferencesStore.$state })
+    },
+    activePath: '/finder',
+    label: 'Finder'
+  },
+  { to: '/results', activePath: '/results', label: 'Ranking' },
+  { to: '/compare', activePath: '/compare', label: 'Vergleich' },
+  { to: '/methodik', activePath: '/methodik', label: 'Methodik' }
+])
 
 const searchRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')

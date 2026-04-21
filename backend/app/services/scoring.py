@@ -250,6 +250,8 @@ class ScoringService:
                     raw_value=value.raw_value,
                     normalized_value=value.normalized_value,
                     quality_flag=self.localized_quality_flag(value.quality_flag),
+                    source_name=definition.source_name,
+                    updated_at=value.updated_at.isoformat() if value.updated_at else None,
                     text=self._indicator_text(
                         definition.key,
                         value.raw_value,
@@ -259,6 +261,62 @@ class ScoringService:
                 )
             )
         return details
+
+    def build_category_quality_summary(
+        self,
+        indicator_rows: list[tuple[object, object]],
+    ) -> dict[str, dict[str, object]]:
+        grouped_flags: dict[str, dict[str, list[str]]] = {}
+
+        for definition, value in indicator_rows:
+            if value.quality_flag == "ok":
+                continue
+            category = str(definition.category)
+            flag = str(value.quality_flag)
+            grouped_flags.setdefault(category, {}).setdefault(flag, []).append(
+                self.localized_indicator_name(definition.key, definition.name)
+            )
+
+        summary: dict[str, dict[str, object]] = {}
+        for category, flags in grouped_flags.items():
+            notes: list[str] = []
+            for flag, indicators in sorted(flags.items()):
+                localized_flag = self.localized_quality_flag(flag)
+                indicator_list = ", ".join(sorted(indicators))
+                notes.append(f"{localized_flag}: {indicator_list}.")
+            summary[category] = {
+                "status": "attention",
+                "notes": notes,
+            }
+
+        return summary
+
+    def build_category_freshness_summary(
+        self,
+        indicator_rows: list[tuple[object, object]],
+    ) -> dict[str, dict[str, object]]:
+        freshness: dict[str, dict[str, object]] = {}
+
+        for definition, value in indicator_rows:
+            category = str(definition.category)
+            bucket = freshness.setdefault(
+                category,
+                {"updated_at": None, "sources": set()},
+            )
+            if value.updated_at and (
+                bucket["updated_at"] is None or value.updated_at > bucket["updated_at"]
+            ):
+                bucket["updated_at"] = value.updated_at
+            if definition.source_name:
+                bucket["sources"].add(str(definition.source_name))
+
+        return {
+            category: {
+                "updated_at": values["updated_at"].isoformat() if values["updated_at"] else None,
+                "sources": sorted(values["sources"]),
+            }
+            for category, values in freshness.items()
+        }
 
     def _build_calculation_details(
         self,
@@ -550,7 +608,27 @@ class ScoringService:
                     coverage_amenities=snapshot.coverage_amenities,
                     coverage_landuse=snapshot.coverage_landuse,
                     coverage_oepnv=snapshot.coverage_oepnv,
+                    trust_updated_at=snapshot.updated_at.isoformat() if snapshot.updated_at else None,
                     reason=build_reason(category_scores, preferences),
                 )
             )
+
+        region_by_ars = {region.ars: region for region, _ in rows}
+        indicator_rows_by_region = self.repository.list_indicator_values_for_regions(
+            [region.id for region in region_by_ars.values() if region.id is not None]
+        )
+
+        for item in items:
+            region = region_by_ars[item.ars]
+            indicator_rows = indicator_rows_by_region.get(int(region.id), [])
+            freshness_by_category = self.build_category_freshness_summary(indicator_rows)
+            quality_by_category = self.build_category_quality_summary(indicator_rows)
+            freshness = freshness_by_category.get(category, {})
+            quality = quality_by_category.get(category, {})
+            if freshness.get("updated_at"):
+                item.trust_updated_at = str(freshness["updated_at"])
+            if freshness.get("sources"):
+                item.trust_sources = list(freshness["sources"])
+            if quality.get("notes"):
+                item.trust_quality_notes = list(quality["notes"])
         return RecommendationResponse(items=items)

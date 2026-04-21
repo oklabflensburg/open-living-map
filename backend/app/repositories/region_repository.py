@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.core.ars import lookup_candidates, slugify_region_name
 from app.core.config import settings
-from app.models.indicator import IndicatorDefinition
+from app.models.indicator import IndicatorDefinition, RegionIndicatorValue
 from app.models.region import Region
 from app.models.score import RegionScoreSnapshot
 
@@ -224,6 +224,43 @@ class RegionRepository:
             .where(RegionScoreSnapshot.period == settings.default_score_period)
         )
         return self.session.exec(statement).first()
+
+    def get_category_freshness(self, region_id: int) -> dict[str, dict[str, Any]]:
+        statement = (
+            select(
+                IndicatorDefinition.category,
+                IndicatorDefinition.source_name,
+                RegionIndicatorValue.updated_at,
+            )
+            .join(
+                RegionIndicatorValue,
+                RegionIndicatorValue.indicator_id == IndicatorDefinition.id,
+            )
+            .where(RegionIndicatorValue.region_id == region_id)
+            .where(RegionIndicatorValue.period == settings.default_score_period)
+        )
+        rows = self.session.exec(statement).all()
+
+        freshness: dict[str, dict[str, Any]] = {}
+        for category, source_name, updated_at in rows:
+            bucket = freshness.setdefault(
+                str(category),
+                {"updated_at": None, "sources": set()},
+            )
+            if updated_at and (
+                bucket["updated_at"] is None or updated_at > bucket["updated_at"]
+            ):
+                bucket["updated_at"] = updated_at
+            if source_name:
+                bucket["sources"].add(str(source_name))
+
+        return {
+            category: {
+                "updated_at": values["updated_at"],
+                "sources": sorted(values["sources"]),
+            }
+            for category, values in freshness.items()
+        }
 
     def get_boundary_geojson(self, ars: str) -> dict[str, Any] | None:
         table_exists = self.session.execute(
@@ -454,6 +491,43 @@ class RegionRepository:
                 float(row[5]) if row[5] is not None else None,
                 str(row[6]) if row[6] is not None else None,
                 str(row[7]),
+            )
+            for row in rows
+        ]
+
+    def list_climate_stations(
+        self, ars: str
+    ) -> list[tuple[str, str, str, float | None, float | None, str | None]]:
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('climate.region_climate_station') IS NOT NULL")
+        ).scalar()
+        if not table_exists:
+            return []
+        rows = self.session.execute(
+            text(
+                """
+                SELECT
+                    indicator_key,
+                    station_id,
+                    station_name,
+                    latitude,
+                    longitude,
+                    source_url
+                FROM climate.region_climate_station
+                WHERE region_ars = :ars
+                ORDER BY indicator_key
+                """
+            ),
+            {"ars": ars},
+        ).all()
+        return [
+            (
+                str(row[0]),
+                str(row[1]),
+                str(row[2]),
+                float(row[3]) if row[3] is not None else None,
+                float(row[4]) if row[4] is not None else None,
+                str(row[5]) if row[5] is not None else None,
             )
             for row in rows
         ]
