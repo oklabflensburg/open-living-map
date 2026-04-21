@@ -132,14 +132,24 @@ def ensure_osm_tables() -> None:
                 """
             )
         )
-        connection.execute(
+        has_name_column = connection.execute(
             text(
                 """
-                ALTER TABLE osm.amenity_poi_stage
-                ADD COLUMN IF NOT EXISTS name varchar NULL
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'osm'
+                      AND table_name = 'amenity_poi_stage'
+                      AND column_name = 'name'
+                )
                 """
             )
-        )
+        ).scalar()
+        if not has_name_column:
+            raise RuntimeError(
+                "Schema drift detected for osm.amenity_poi_stage: missing column 'name'. "
+                "Run `alembic upgrade head` before executing the OSM import."
+            )
 
 
 def ensure_osm_indexes() -> None:

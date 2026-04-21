@@ -323,7 +323,6 @@ def _prepare_staging() -> str:
                 """
             )
         )
-        session.exec(text("ALTER TABLE oepnv.gtfs_feed_registry ADD COLUMN IF NOT EXISTS schema_name text"))
         session.exec(
             text(
                 """
@@ -336,7 +335,43 @@ def _prepare_staging() -> str:
                 """
             )
         )
-        session.exec(text("ALTER TABLE oepnv.gtfs_stage_registry ADD COLUMN IF NOT EXISTS active_stage_key text"))
+        has_schema_name = session.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'oepnv'
+                      AND table_name = 'gtfs_feed_registry'
+                      AND column_name = 'schema_name'
+                )
+                """
+            )
+        ).scalar()
+        if not has_schema_name:
+            raise RuntimeError(
+                "Schema drift detected for oepnv.gtfs_feed_registry: missing column "
+                "'schema_name'. Run `alembic upgrade head` before executing the OePNV import."
+            )
+
+        has_active_stage_key = session.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'oepnv'
+                      AND table_name = 'gtfs_stage_registry'
+                      AND column_name = 'active_stage_key'
+                )
+                """
+            )
+        ).scalar()
+        if not has_active_stage_key:
+            raise RuntimeError(
+                "Schema drift detected for oepnv.gtfs_stage_registry: missing column "
+                "'active_stage_key'. Run `alembic upgrade head` before executing the OePNV import."
+            )
 
         session.exec(
             text(

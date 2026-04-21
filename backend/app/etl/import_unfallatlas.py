@@ -162,7 +162,17 @@ def ensure_unfallatlas_tables(session) -> None:
         )
     ).scalar()
     if has_old_column and not has_new_column:
-        session.execute(text("ALTER TABLE traffic.accident_point RENAME COLUMN district_ars TO region_ars"))
+        raise RuntimeError(
+            "Schema drift detected for traffic.accident_point: found legacy column "
+            "'district_ars' but missing 'region_ars'. Run `alembic upgrade head` "
+            "before executing the Unfallatlas import."
+        )
+    if not has_new_column:
+        raise RuntimeError(
+            "Schema drift detected for traffic.accident_point: missing column "
+            "'region_ars'. Run `alembic upgrade head` before executing the "
+            "Unfallatlas import."
+        )
     session.execute(
         text(
             """

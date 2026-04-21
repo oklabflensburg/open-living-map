@@ -7,7 +7,7 @@
             {{ item.name }}
           </NuxtLink>
         </h3>
-        <p class="text-xs text-slate-500">AGS: {{ item.ars }}</p>
+        <p class="text-xs text-slate-500">{{ regionMetaLine(item) }}</p>
         <p class="mt-1 text-xs text-slate-500">
           Neutraler Gesamtscore: {{ item.score_total.toFixed(1) }}
         </p>
@@ -219,6 +219,14 @@ function indicatorCategoryTheme(category: string) {
     cardClass: 'border-slate-200 bg-white',
     badgeClass: 'bg-slate-100 text-slate-700'
   }
+}
+
+function regionMetaLine(item: RecommendationItem) {
+  return [
+    `AGS ${item.ars}`,
+    item.state_name,
+    item.district_name
+  ].filter(Boolean).join(' · ')
 }
 
 function coverageText(item: RecommendationItem) {
