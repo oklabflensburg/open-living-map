@@ -1,7 +1,7 @@
+import re
 import json
 from typing import Any
 
-from sqlalchemy import case, func
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -80,6 +80,103 @@ class RegionRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def _search_region_ars(
+        self,
+        search_query: str,
+        limit: int,
+        offset: int,
+        state_code: str | None = None,
+    ) -> list[str]:
+        query = search_query.strip().lower()
+        raw_query = search_query.strip()
+        contains_pattern = f"%{query}%"
+        prefix_pattern = f"{query}%"
+        postal_prefix = f"{raw_query}%"
+        state_filter = "AND r.state_code = :state_code" if state_code else ""
+        is_exact_postal = bool(re.fullmatch(r"\d{5}", raw_query))
+
+        if is_exact_postal:
+            rows = self.session.execute(
+                text(
+                    f"""
+                    SELECT r.ars
+                    FROM region r
+                    JOIN postal.region_postal_code pc ON pc.region_ars = r.ars
+                    WHERE pc.postal_code = :raw_query
+                      AND pc.is_primary = true
+                      {state_filter}
+                    ORDER BY pc.overlap_area DESC NULLS LAST, COALESCE(r.population, 0) DESC, r.name
+                    LIMIT :limit
+                    OFFSET :offset
+                    """
+                ),
+                {
+                    "raw_query": raw_query,
+                    "limit": limit,
+                    "offset": offset,
+                    **({"state_code": state_code} if state_code else {}),
+                },
+            ).all()
+            if rows:
+                return [str(row[0]) for row in rows]
+
+        rows = self.session.execute(
+            text(
+                f"""
+                SELECT r.ars
+                FROM region r
+                WHERE (
+                       lower(r.name) LIKE :contains_pattern
+                   OR lower(r.state_name) LIKE :contains_pattern
+                   OR r.ars LIKE :ars_prefix
+                   OR EXISTS (
+                        SELECT 1
+                        FROM postal.region_postal_code pc
+                        WHERE pc.region_ars = r.ars
+                          AND pc.postal_code LIKE :postal_prefix
+                   )
+                )
+                  {state_filter}
+                ORDER BY
+                    CASE
+                        WHEN r.ars = :raw_query THEN 0
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM postal.region_postal_code pc
+                            WHERE pc.region_ars = r.ars
+                              AND pc.postal_code = :raw_query
+                        ) THEN 1
+                        WHEN lower(r.name) = :query THEN 2
+                        WHEN lower(r.name) LIKE :prefix_pattern THEN 3
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM postal.region_postal_code pc
+                            WHERE pc.region_ars = r.ars
+                              AND pc.postal_code LIKE :postal_prefix
+                        ) THEN 4
+                        WHEN lower(r.state_name) LIKE :prefix_pattern THEN 5
+                        ELSE 6
+                    END,
+                    char_length(r.name),
+                    r.name
+                LIMIT :limit
+                OFFSET :offset
+                """
+            ),
+            {
+                "query": query,
+                "raw_query": raw_query,
+                "contains_pattern": contains_pattern,
+                "prefix_pattern": prefix_pattern,
+                "ars_prefix": f"{raw_query}%",
+                "postal_prefix": postal_prefix,
+                "limit": limit,
+                "offset": offset,
+                **({"state_code": state_code} if state_code else {}),
+            },
+        ).all()
+        return [str(row[0]) for row in rows]
+
     def list_regions(
         self, 
         search_query: str | None = None, 
@@ -87,31 +184,24 @@ class RegionRepository:
         limit: int = 100,
         offset: int = 0
     ) -> list[Region]:
-        statement = select(Region)
-        
         if search_query:
-            query = search_query.strip().lower()
-            contains_pattern = f"%{query}%"
-            prefix_pattern = f"{query}%"
-
-            statement = statement.where(
-                func.lower(Region.name).like(contains_pattern)
-                | func.lower(Region.state_name).like(contains_pattern)
-                | Region.ars.startswith(search_query.strip())
+            ars_matches = self._search_region_ars(
+                search_query,
+                limit=limit,
+                offset=offset,
+                state_code=state_code,
             )
+            if not ars_matches:
+                return []
+            statement = select(Region).where(Region.ars.in_(ars_matches))
+            regions = list(self.session.exec(statement))
+            order = {ars: index for index, ars in enumerate(ars_matches)}
+            regions.sort(key=lambda region: order.get(region.ars, len(order)))
+            return regions
 
-            statement = statement.order_by(
-                case((func.lower(Region.name) == query, 0), else_=1),
-                case((func.lower(Region.name).like(prefix_pattern), 0), else_=1),
-                case((func.lower(Region.state_name).like(prefix_pattern), 0), else_=1),
-                Region.name,
-            )
-        else:
-            statement = statement.order_by(Region.name)
-        
+        statement = select(Region).order_by(Region.name)
         if state_code:
             statement = statement.where(Region.state_code == state_code)
-
         statement = statement.offset(offset).limit(limit)
         return list(self.session.exec(statement))
 
@@ -123,8 +213,7 @@ class RegionRepository:
             return region
 
         requested_slug = slugify_region_name(ars)
-        slug_statement = select(Region).where(
-            Region.slug == requested_slug).order_by(Region.id)
+        slug_statement = select(Region).where(Region.slug == requested_slug)
         return self.session.exec(slug_statement).first()
 
     def get_score_snapshot(self, region_id: int) -> RegionScoreSnapshot | None:

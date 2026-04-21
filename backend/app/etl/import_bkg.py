@@ -447,6 +447,24 @@ def apply_xrepository_district_names(rows: list[dict[str, object]], district_map
             row["district_name"] = mapped_name
 
 
+def assign_unique_slugs(rows: list[dict[str, object]]) -> None:
+    seen: dict[str, str] = {}
+    for row in sorted(rows, key=lambda item: str(item.get("ars", ""))):
+        base_slug = slugify_region_name(
+            str(row["name"]),
+            str(row.get("district_name", "")),
+            str(row.get("state_name", "")),
+            str(row.get("bem", "")),
+            str(row.get("_district_type", "")),
+        )
+        ars_value = normalize_ars(str(row["ars"]))
+        slug = base_slug
+        if slug in seen and seen[slug] != ars_value:
+            slug = f"{base_slug}-{ars_value}"
+        row["_slug"] = slug
+        seen[slug] = ars_value
+
+
 def upsert_regions(session: Session, rows: Iterable[dict[str, object]]) -> None:
     count = 0
     for row in rows:
@@ -454,13 +472,13 @@ def upsert_regions(session: Session, rows: Iterable[dict[str, object]]) -> None:
                       value in row.items() if not key.startswith("_")}
         ars_value = normalize_ars(str(region_row["ars"]))
         region_row["ars"] = ars_value
-        region_row["slug"] = slugify_region_name(
+        region_row["slug"] = str(row.get("_slug") or slugify_region_name(
             str(region_row["name"]),
             str(region_row.get("district_name", "")),
             str(region_row.get("state_name", "")),
             str(region_row.get("bem", "")),
             str(row.get("_district_type", "")),
-        )
+        ))
 
         existing = session.exec(select(Region).where(
             Region.ars == ars_value)).first()
@@ -972,6 +990,7 @@ def fetch_bkg_regions() -> list[dict[str, object]]:
             rows = fetch_bkg_regions_from_postgis(session)
             if rows:
                 apply_xrepository_district_names(rows, district_mapping)
+                assign_unique_slugs(rows)
                 logger.info(
                     "BKG Gemeinde-Import erfolgreich aus PostGIS-Tabelle %s (gf=%s, %s Gemeinden)",
                     settings.bkg_municipality_table,
@@ -1020,6 +1039,7 @@ def fetch_bkg_regions() -> list[dict[str, object]]:
             rows = [row for row in rows if row is not None]
             if rows:
                 apply_xrepository_district_names(rows, district_mapping)
+                assign_unique_slugs(rows)
                 logger.info(
                     "BKG WFS Gemeinde-Import erfolgreich mit Layer %s (%s Gemeinden)", type_name, len(rows))
                 return rows

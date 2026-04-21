@@ -80,7 +80,9 @@ class RegionService:
             )
             for category, count_total in self.repository.list_accident_stats(region.ars)
         ]
-        indicator_values = {indicator.key: indicator for indicator in base_scoring._build_indicator_details(region.id)}
+        indicator_rows = base_scoring.repository.list_indicator_values(region.id)
+        indicator_details = base_scoring._build_indicator_details(indicator_rows)
+        indicator_values = {indicator.key: indicator for indicator in indicator_details}
         air_stations = [
             AirStationInfo(
                 indicator_key=indicator_key,
@@ -111,14 +113,14 @@ class RegionService:
             else None
         )
         geometry = self.repository.get_boundary_geojson(region.ars)
-        score_formula, calculation_details, indicators = base_scoring.build_region_explanation(
+        score_formula, calculation_details = base_scoring._build_calculation_details(
             ars=region.ars,
-            region_id=region.id,
             region_level=region.level,
             region_population=region.population,
             category_scores=category_scores,
-            coverage=coverage,
             preferences=base_preferences,
+            indicators=indicator_details,
+            coverage=coverage,
         )
 
         return RegionDetailResponse(
@@ -133,7 +135,7 @@ class RegionService:
             geometry=geometry,
             score_formula=score_formula,
             calculation_details=calculation_details,
-            indicators=indicators,
+            indicators=indicator_details,
         )
 
     def get_region_amenity_pois(self, ars: str, category: str) -> dict | None:

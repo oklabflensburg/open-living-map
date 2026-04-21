@@ -1,6 +1,6 @@
 # Wohnortkompass
 
-Wohnortkompass ist ein lokales Monorepo fuer eine Deutschlandkarte mit kommunalen Wohnortindikatoren. Das Projekt kombiniert einen FastAPI-Backend-Stack mit einer Nuxt-Frontend-App und mehreren ETL-Jobs fuer Geometrien, Demografie, Klima, Luftqualitaet, OSM-POIs, OePNV und Unfallatlas-Daten.
+Wohnortkompass ist ein lokales Monorepo fuer eine Deutschlandkarte mit kommunalen Wohnortindikatoren. Das Projekt kombiniert einen FastAPI-Backend-Stack mit einer Nuxt-Frontend-App und mehreren ETL-Jobs fuer Geometrien, Demografie, Klima, Luftqualitaet, OSM-POIs, OSM-Postleitzahlen, OePNV und Unfallatlas-Daten.
 
 ## Inhalt
 
@@ -23,6 +23,7 @@ Wohnortkompass ist ein lokales Monorepo fuer eine Deutschlandkarte mit kommunale
     - [UBA](#uba)
     - [Unfallatlas](#unfallatlas)
     - [OSM](#osm)
+    - [OSM-Postleitzahlen](#osm-postleitzahlen)
   - [Lizenz und Attribution](#lizenz-und-attribution)
     - [OpenStreetMap](#openstreetmap)
     - [BKG VG25](#bkg-vg25-1)
@@ -186,6 +187,7 @@ python -m app.etl.import_dwd
 python -m app.etl.import_uba
 python -m app.etl.import_unfallatlas
 python -m app.etl.import_osm
+python -m app.etl.import_postal_codes
 python -m app.etl.import_oepnv
 python -m app.etl.build_scores
 ```
@@ -280,6 +282,34 @@ Aktuell:
 ### OSM
 
 `import_osm` nutzt `osm2pgsql`-Tabellen und Gemeindegrenzen, um Alltagsnaehe zu aggregieren.
+
+### OSM-Postleitzahlen
+
+`import_postal_codes` nutzt lokal importierte OSM-Postleitzahlgebiete aus `osm.planet_osm_polygon`.
+
+Was der Import macht:
+
+- liest OSM-Polygone mit `boundary=postal_code`
+- extrahiert die 5-stellige PLZ aus `postal_code` oder `addr:postcode`
+- mappt die PLZ-Flaechen per raeumlichem Join auf `geo.municipality_boundary`
+- schreibt die Gemeinde-PLZ-Zuordnung nach `postal.region_postal_code`
+
+Wofuer das genutzt wird:
+
+- Header-Suche
+- Compare-Suche
+- API-Suche `/api/v1/regions/search/autocomplete`
+
+Die Suche akzeptiert damit:
+
+- Gemeindename
+- AGS
+- PLZ
+
+Hinweis:
+
+- eine PLZ kann mehreren Gemeinden zugeordnet sein
+- in diesem Fall liefert die Suche mehrere fachlich korrekte Gemeindetreffer
 
 ## Lizenz und Attribution
 

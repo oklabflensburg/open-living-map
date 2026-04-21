@@ -14,13 +14,14 @@ class SchemaDriftError(RuntimeError):
     """Raised when the database schema does not match the application model."""
 
 
-def _get_column_names(table_name: str) -> set[str]:
+def _get_column_names(table_name: str, schema: str | None = None) -> set[str]:
     inspector = inspect(engine)
-    table_names = set(inspector.get_table_names())
+    table_names = set(inspector.get_table_names(schema=schema))
     if table_name not in table_names:
-        logger.warning("Schema drift detected: table %s is missing.", table_name)
+        qualified_name = f"{schema}.{table_name}" if schema else table_name
+        logger.warning("Schema drift detected: table %s is missing.", qualified_name)
         return set()
-    return {column["name"] for column in inspector.get_columns(table_name)}
+    return {column["name"] for column in inspector.get_columns(table_name, schema=schema)}
 
 
 def check_indicator_schema_drift() -> bool:
@@ -108,14 +109,40 @@ def check_region_schema_drift() -> bool:
     return True
 
 
+def check_postal_schema_drift() -> bool:
+    """Check if postal.region_postal_code has expected columns."""
+    column_names = _get_column_names("region_postal_code", schema="postal")
+
+    expected_columns = {
+        "postal_code",
+        "region_ars",
+        "region_name",
+        "postal_name",
+        "overlap_area",
+        "is_primary",
+        "updated_at",
+    }
+    missing = expected_columns - column_names
+
+    if missing:
+        logger.warning(
+            "Schema drift detected in postal.region_postal_code: missing columns %s. "
+            "Run alembic migrations to fix.",
+            missing,
+        )
+        return False
+    return True
+
+
 def check_schema_drift() -> bool:
     """Check all schema expectations.
     Returns True if all checks pass, False if any drift detected."""
     indicator_ok = check_indicator_schema_drift()
     score_ok = check_score_schema_drift()
     region_ok = check_region_schema_drift()
-    
-    return indicator_ok and score_ok and region_ok
+    postal_ok = check_postal_schema_drift()
+
+    return indicator_ok and score_ok and region_ok and postal_ok
 
 
 def assert_schema_is_current() -> None:

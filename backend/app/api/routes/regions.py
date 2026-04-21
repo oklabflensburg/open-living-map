@@ -11,7 +11,7 @@ router = APIRouter(tags=["regions"])
 
 @router.get("/regions", response_model=RegionListResponse)
 def list_regions(
-    q: str | None = Query(default=None, description="Search query for region name"),
+    q: str | None = Query(default=None, description="Search query for region name, AGS or postal code"),
     state_code: str | None = Query(default=None, pattern=r"^\d{2}$", description="Filter by state code"),
     limit: int = Query(default=100, ge=1, le=1000, description="Maximum number of results"),
     offset: int = Query(default=0, ge=0, description="Offset for pagination"),
@@ -71,7 +71,7 @@ def get_region_accident_pois(ars: str, category: str, session: Session = Depends
 
 @router.get("/regions/search/autocomplete", response_model=RegionListResponse)
 def search_regions_autocomplete(
-    q: str = Query(..., min_length=2, description="Search query for region name (minimum 2 characters)"),
+    q: str = Query(..., min_length=2, description="Search query for region name, AGS or postal code (minimum 2 characters)"),
     limit: int = Query(default=20, ge=1, le=50, description="Maximum number of results"),
     session: Session = Depends(get_session),
 ) -> RegionListResponse:

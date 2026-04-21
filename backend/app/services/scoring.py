@@ -88,7 +88,6 @@ class ScoringService:
     def __init__(self, session: Session) -> None:
         self.session = session
         self.repository = ScoreRepository(session)
-        self._district_name_cache: dict[str, str | None] = {}
 
     @staticmethod
     def amenity_label(category: str) -> str:
@@ -230,24 +229,18 @@ class ScoringService:
     def localized_quality_flag(flag: str) -> str:
         return QUALITY_FLAG_LABELS.get(flag, flag)
 
-    def _district_name_for_region(self, ars: str, level: str, district_name: str | None) -> str | None:
-        if level != "gemeinde":
-            return district_name
-        if district_name:
-            return district_name
-        if ars not in self._district_name_cache:
-            self._district_name_cache[ars] = self.repository.resolve_district_name(ars)
-        return self._district_name_cache[ars]
-
     def _indicator_text(self, key: str, raw_value: float, normalized_value: float, unit: str) -> str:
         label = self.localized_indicator_name(key)
         formatted = self._format_value(raw_value, unit)
         localized_unit = self.localized_unit(unit)
         return f"{label}: Rohwert {formatted} ({localized_unit}), normierter Teil-Score {normalized_value:.1f} von 100."
 
-    def _build_indicator_details(self, region_id: int) -> list[RecommendationIndicatorDetail]:
+    def _build_indicator_details(
+        self,
+        indicator_rows: list[tuple[object, object]],
+    ) -> list[RecommendationIndicatorDetail]:
         details: list[RecommendationIndicatorDetail] = []
-        for definition, value in self.repository.list_indicator_values(region_id):
+        for definition, value in indicator_rows:
             details.append(
                 RecommendationIndicatorDetail(
                     key=definition.key,
@@ -369,7 +362,9 @@ class ScoringService:
         coverage: dict[str, float],
         preferences: RecommendationInput,
     ) -> tuple[str, list[str], list[RecommendationIndicatorDetail]]:
-        indicators = self._build_indicator_details(region_id)
+        indicators = self._build_indicator_details(
+            self.repository.list_indicator_values(region_id)
+        )
         score_formula, calculation_details = self._build_calculation_details(
             ars=ars,
             region_level=region_level,
@@ -391,10 +386,18 @@ class ScoringService:
     ) -> RecommendationResponse:
         if persist_session:
             self._persist_preference_session(preferences)
-        rows = self.repository.list_snapshots(
-            include_ars=include_ars,
-            state_code=preferences.state_code,
-        )
+        weights = self._weights(preferences)
+        if include_ars:
+            rows = self.repository.list_snapshots(
+                include_ars=include_ars,
+                state_code=preferences.state_code,
+            )
+        else:
+            rows = self.repository.list_ranked_snapshots_by_preferences(
+                weights=weights,
+                state_code=preferences.state_code,
+                limit=limit,
+            )
 
         items: list[RecommendationItem] = []
         for region, snapshot in rows:
@@ -424,7 +427,7 @@ class ScoringService:
                     name=region.name,
                     level=region.level,
                     state_name=region.state_name,
-                    district_name=self._district_name_for_region(region.ars, region.level, region.district_name),
+                    district_name=region.district_name,
                     centroid_lat=region.centroid_lat,
                     centroid_lon=region.centroid_lon,
                     score_total=snapshot.score_total,
@@ -447,13 +450,21 @@ class ScoringService:
                 )
             )
 
-        items.sort(key=lambda item: item.score_profile, reverse=True)
-        if not include_ars:
+        if include_ars:
+            items.sort(key=lambda item: item.score_profile, reverse=True)
+        else:
             items = items[:limit]
         if not include_details:
             return RecommendationResponse(items=items)
+
+        item_by_ars = {item.ars: item for item in items}
+        region_by_ars = {region.ars: region for region, _ in rows if region.ars in item_by_ars}
+        indicator_rows_by_region = self.repository.list_indicator_values_for_regions(
+            [region.id for region in region_by_ars.values() if region.id is not None]
+        )
+
         for item in items:
-            row = next(region for region, _ in rows if region.ars == item.ars)
+            row = region_by_ars[item.ars]
             category_scores = {
                 "climate": item.score_climate,
                 "air": item.score_air,
@@ -472,14 +483,17 @@ class ScoringService:
                 "landuse": item.coverage_landuse,
                 "oepnv": item.coverage_oepnv,
             }
-            score_formula, calculation_details, indicators = self.build_region_explanation(
+            indicators = self._build_indicator_details(
+                indicator_rows_by_region.get(int(row.id), [])
+            )
+            score_formula, calculation_details = self._build_calculation_details(
                 ars=row.ars,
-                region_id=row.id,
                 region_level=row.level,
                 region_population=row.population,
                 category_scores=category_scores,
-                coverage=coverage,
                 preferences=preferences,
+                indicators=indicators,
+                coverage=coverage,
             )
             item.score_formula = score_formula
             item.calculation_details = calculation_details
@@ -517,7 +531,7 @@ class ScoringService:
                     name=region.name,
                     level=region.level,
                     state_name=region.state_name,
-                    district_name=self._district_name_for_region(region.ars, region.level, region.district_name),
+                    district_name=region.district_name,
                     centroid_lat=region.centroid_lat,
                     centroid_lon=region.centroid_lon,
                     score_total=snapshot.score_total,
