@@ -45,7 +45,7 @@
         </div>
       </div>
 
-      <div v-if="demographicStats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div v-if="demographicStats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <article v-for="item in demographicStats" :key="item.label"
           class="rounded-lg border border-violet-200 bg-white/80 p-4">
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
@@ -648,6 +648,10 @@ function formatPercent(value: number) {
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value) + ' %'
 }
 
+function formatAreaKm2(value: number) {
+  return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value) + ' km²'
+}
+
 function formatPer10k(value: number) {
   return new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
 }
@@ -798,6 +802,7 @@ const demographicStats = computed(() => {
 
   const items: Array<{ label: string; value: string; note?: string }> = []
   const population = detail.value.region.population ?? indicatorByKey('population_total_destatis')?.raw_value ?? null
+  const areaKm2 = detail.value.region.area_km2
   const femaleShare = indicatorByKey('female_share_destatis')
   const youthShare = indicatorByKey('youth_share_destatis')
   const seniorShare = indicatorByKey('senior_share_destatis')
@@ -807,6 +812,13 @@ const demographicStats = computed(() => {
       label: 'Einwohner gesamt',
       value: formatCount(population),
       note: detail.value.region.population !== null ? 'laut Gemeindedatensatz' : 'laut Destatis-Indikator'
+    })
+  }
+  if (areaKm2 !== null) {
+    items.push({
+      label: 'Fläche',
+      value: formatAreaKm2(areaKm2),
+      note: 'laut Gemeindedatensatz'
     })
   }
   if (femaleShare) {
