@@ -7,6 +7,14 @@
         <template v-if="detail.region.district_name"> · {{ detail.region.district_name }}</template>
       </p>
       <div v-if="detail.region.wikipedia_url || detail.region.wikidata_url" class="mt-3 flex flex-wrap gap-3 text-sm">
+        <a
+          :href="`https://www.statistikportal.de/de/gemeindeverzeichnis/${detail.region.ars}`"
+          target="_blank"
+          rel="noreferrer"
+          class="font-medium text-sky-700 underline decoration-sky-300 underline-offset-4"
+        >
+          Statistikportal
+        </a>
         <a v-if="detail.region.wikipedia_url" :href="detail.region.wikipedia_url" target="_blank" rel="noreferrer"
           class="font-medium text-sky-700 underline decoration-sky-300 underline-offset-4">
           Wikipedia
