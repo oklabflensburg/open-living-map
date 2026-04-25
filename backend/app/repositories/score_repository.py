@@ -1,16 +1,13 @@
-from sqlalchemy import case
-from sqlalchemy import desc
-from sqlalchemy import literal
-from sqlalchemy import text
+from math import log
+
+from sqlalchemy import case, desc, func, literal, text
 from sqlmodel import Session, select
 
 from app.core.ars import lookup_candidates
 from app.core.config import settings
-from app.models.indicator import IndicatorDefinition
-from app.models.indicator import RegionIndicatorValue
+from app.models.indicator import IndicatorDefinition, RegionIndicatorValue
 from app.models.region import Region
 from app.models.score import RegionScoreSnapshot
-
 
 CATEGORY_SCORE_COLUMNS = {
     "climate": "score_climate",
@@ -21,6 +18,11 @@ CATEGORY_SCORE_COLUMNS = {
     "landuse": "score_landuse",
     "oepnv": "score_oepnv",
 }
+
+URBANITY_BLEND_WEIGHT = 0.2
+URBANITY_POPULATION_FLOOR = 10_000
+URBANITY_POPULATION_CEILING = 250_000
+
 
 class ScoreRepository:
     def __init__(self, session: Session) -> None:
@@ -84,6 +86,9 @@ class ScoreRepository:
         *,
         weights: dict[str, int],
         state_code: str | None = None,
+        min_scores: dict[str, float | None] | None = None,
+        coverage_min: float | None = None,
+        urbanity_boost: bool = False,
         limit: int = 10,
     ) -> list[tuple[Region, RegionScoreSnapshot]]:
         score_columns = {
@@ -116,9 +121,9 @@ class ScoreRepository:
             score_column = score_columns[category]
             coverage_column = coverage_columns[category]
             weight_literal = literal(float(weight))
-            coverage_present = case((coverage_column > 0, 1.0), else_=0.0)
-            weighted_numerator = weighted_numerator + (score_column * weight_literal * coverage_present)
-            weighted_denominator = weighted_denominator + (weight_literal * coverage_present)
+            coverage_weight = case((coverage_column > 0, coverage_column), else_=0.0)
+            weighted_numerator = weighted_numerator + (score_column * weight_literal * coverage_weight)
+            weighted_denominator = weighted_denominator + (weight_literal * coverage_weight)
             fallback_numerator = fallback_numerator + (score_column * weight_literal)
             fallback_denominator = fallback_denominator + weight_literal
 
@@ -127,17 +132,51 @@ class ScoreRepository:
             (fallback_denominator > 0, fallback_numerator / fallback_denominator),
             else_=literal(0.0),
         )
+        coverage_confidence = case(
+            (fallback_denominator > 0, weighted_denominator / fallback_denominator),
+            else_=literal(0.0),
+        )
+        profile_score = profile_score * coverage_confidence
+        if urbanity_boost:
+            population = func.coalesce(Region.population, 0)
+            log_floor = log(URBANITY_POPULATION_FLOOR)
+            log_range = log(URBANITY_POPULATION_CEILING) - log_floor
+            urbanity_score = case(
+                (population <= URBANITY_POPULATION_FLOOR, literal(0.0)),
+                (population >= URBANITY_POPULATION_CEILING, literal(100.0)),
+                else_=((func.ln(population) - literal(log_floor)) / literal(log_range)) * literal(100.0),
+            )
+            profile_score = (
+                profile_score * literal(1.0 - URBANITY_BLEND_WEIGHT)
+                + urbanity_score * literal(URBANITY_BLEND_WEIGHT)
+            ) * coverage_confidence
 
         statement = (
             select(Region, RegionScoreSnapshot)
             .join(RegionScoreSnapshot, Region.id == RegionScoreSnapshot.region_id)
             .where(RegionScoreSnapshot.profile_key == "base")
             .where(RegionScoreSnapshot.period == settings.default_score_period)
-            .order_by(desc(profile_score), Region.id)
-            .limit(limit)
         )
         if state_code:
             statement = statement.where(Region.state_code == state_code)
+        if min_scores:
+            for category, minimum in min_scores.items():
+                if minimum is None:
+                    continue
+                statement = statement.where(score_columns[category] >= minimum)
+        if coverage_min is not None:
+            normalized_coverage_min = coverage_min / 100
+            coverage_expression = (
+                RegionScoreSnapshot.coverage_climate
+                + RegionScoreSnapshot.coverage_air
+                + RegionScoreSnapshot.coverage_safety
+                + RegionScoreSnapshot.coverage_demographics
+                + RegionScoreSnapshot.coverage_amenities
+                + RegionScoreSnapshot.coverage_landuse
+                + RegionScoreSnapshot.coverage_oepnv
+            ) / 7
+            statement = statement.where(coverage_expression >= normalized_coverage_min)
+        statement = statement.order_by(desc(profile_score), Region.id).limit(limit)
         return list(self.session.exec(statement).all())
 
     def list_top_snapshots_by_category(

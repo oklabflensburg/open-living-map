@@ -52,8 +52,41 @@
     <div v-else-if="errorMessage" class="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-700 shadow-sm">
       {{ errorMessage }}
     </div>
-    <div v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div class="overflow-x-auto">
+    <div v-else class="space-y-3">
+      <div class="grid gap-3 md:hidden">
+        <article
+          v-for="(item, index) in response?.items || []"
+          :key="item.ars"
+          class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Rang {{ index + 1 }}</p>
+              <h2 class="mt-1 truncate text-base font-semibold text-slate-900">{{ item.name }}</h2>
+              <p class="mt-1 text-xs text-slate-500">{{ locationSubtitle(item) }}</p>
+            </div>
+            <span class="shrink-0 rounded-lg px-2.5 py-1 text-sm font-semibold" :class="categoryMeta.badgeClass">
+              {{ getRankingScore(item, category).toFixed(1) }}
+            </span>
+          </div>
+          <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+            <p>
+              <span class="block font-semibold text-slate-900">{{ categoryMeta.label }}</span>
+              Abdeckung {{ categoryCoverageText(item, category) }}
+            </p>
+            <p>
+              <span class="block font-semibold text-slate-900">Gesamtscore</span>
+              {{ item.score_total.toFixed(1) }}
+            </p>
+          </div>
+          <NuxtLink :to="`/region/${item.slug}`" class="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
+            Details ansehen
+          </NuxtLink>
+        </article>
+      </div>
+
+      <div class="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+        <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-200 text-sm">
           <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
@@ -81,6 +114,7 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   </section>

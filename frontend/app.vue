@@ -175,12 +175,22 @@ const route = useRoute()
 const preferencesStore = usePreferencesStore()
 const { searchRegionsAutocomplete } = useRegions()
 const repoUrl = computed(() => legal.value.repoUrl || 'https://github.com/oklabflensburg/wohnortkompass')
+const finderNavTarget = computed(() => {
+  if (route.path === '/finder' || route.path === '/results') {
+    return {
+      path: '/finder',
+      query: { ...route.query }
+    }
+  }
+
+  return {
+    path: '/finder',
+    query: buildPreferenceQuery({ ...preferencesStore.$state })
+  }
+})
 const navItems = computed(() => [
   {
-    to: {
-      path: '/finder',
-      query: buildPreferenceQuery({ ...preferencesStore.$state })
-    },
+    to: finderNavTarget.value,
     activePath: '/finder',
     label: 'Finder'
   },
@@ -331,10 +341,10 @@ useSeoMeta({
   description: siteDescription,
   ogSiteName: siteName,
   ogLocale: siteLocale,
-  ogImage: absoluteUrl('/logo.png'),
-  ogImageSecureUrl: absoluteUrl('/logo.png'),
+  ogImage: absoluteUrl('/og-image.png'),
+  ogImageSecureUrl: absoluteUrl('/og-image.png'),
   ogImageAlt: 'Wohnort-Kompass: Regionen in Deutschland mit offenen Daten vergleichen',
-  twitterImage: absoluteUrl('/logo.png'),
+  twitterImage: absoluteUrl('/og-image.png'),
   twitterImageAlt: 'Wohnort-Kompass: Regionen in Deutschland mit offenen Daten vergleichen',
   twitterCard: 'summary_large_image'
 })
@@ -359,12 +369,7 @@ useHead({
             name: siteName,
             url: absoluteUrl('/'),
             description: siteDescription,
-            inLanguage: 'de',
-            potentialAction: {
-              '@type': 'SearchAction',
-              target: `${absoluteUrl('/results')}?q={search_term_string}`,
-              'query-input': 'required name=search_term_string'
-            }
+            inLanguage: 'de'
           },
           {
             '@type': 'Organization',

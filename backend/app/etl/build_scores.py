@@ -54,14 +54,14 @@ def main() -> None:
         with with_session() as session:
             regions = list(session.exec(select(Region)))
             indicators = {row.id: row for row in session.exec(select(IndicatorDefinition))}
-        
+
         # Count total indicators per category for coverage calculation
             indicators_by_category: dict[str, list[IndicatorDefinition]] = defaultdict(list)
             for indicator in indicators.values():
                 indicators_by_category[indicator.category].append(indicator)
 
             total_indicators_per_category = {
-                category: len(indicators_by_category[category]) 
+                category: len(indicators_by_category[category])
                 for category in CATEGORIES
             }
 
@@ -103,11 +103,15 @@ def main() -> None:
                         # Missing category - don't assign a score
                         category_scores[category] = None
 
-                # Calculate total score only over categories with data
+                # Calculate total score with a coverage penalty so sparse proxy data
+                # cannot rank like a fully covered region.
                 categories_with_data = [cat for cat in CATEGORIES if category_scores[cat] is not None]
                 if categories_with_data:
                     total = round(
-                        sum(category_scores[cat] for cat in categories_with_data) / len(categories_with_data), 
+                        sum(
+                            (category_scores[cat] or 0.0) * category_coverage[cat]
+                            for cat in CATEGORIES
+                        ) / len(CATEGORIES),
                         2
                     )
                 else:

@@ -20,6 +20,7 @@ export interface RegionListResponse {
 }
 
 export interface RecommendationInput {
+  preset?: 'family' | 'transit' | 'air-climate' | 'urban' | 'quiet-nature' | null
   climate_weight: number
   air_weight: number
   safety_weight: number
@@ -28,6 +29,14 @@ export interface RecommendationInput {
   landuse_weight: number
   oepnv_weight: number
   state_code: string | null
+  min_climate_score: number | null
+  min_air_score: number | null
+  min_safety_score: number | null
+  min_demographics_score: number | null
+  min_amenities_score: number | null
+  min_landuse_score: number | null
+  min_oepnv_score: number | null
+  coverage_min: number | null
 }
 
 export interface RecommendationItem {

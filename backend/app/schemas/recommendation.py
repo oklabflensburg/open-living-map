@@ -1,7 +1,10 @@
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class RecommendationInput(BaseModel):
+    preset: Literal["family", "transit", "air-climate", "urban", "quiet-nature"] | None = None
     climate_weight: int = Field(ge=0, le=5)
     air_weight: int = Field(ge=0, le=5)
     safety_weight: int = Field(ge=0, le=5)
@@ -10,6 +13,26 @@ class RecommendationInput(BaseModel):
     landuse_weight: int = Field(ge=0, le=5)
     oepnv_weight: int = Field(ge=0, le=5)
     state_code: str | None = Field(default=None, pattern=r"^\d{2}$")
+    min_climate_score: float | None = Field(default=None, ge=0, le=100)
+    min_air_score: float | None = Field(default=None, ge=0, le=100)
+    min_safety_score: float | None = Field(default=None, ge=0, le=100)
+    min_demographics_score: float | None = Field(default=None, ge=0, le=100)
+    min_amenities_score: float | None = Field(default=None, ge=0, le=100)
+    min_landuse_score: float | None = Field(default=None, ge=0, le=100)
+    min_oepnv_score: float | None = Field(default=None, ge=0, le=100)
+    coverage_min: float | None = Field(default=None, ge=0, le=100)
+
+    @field_validator("state_code", mode="before")
+    @classmethod
+    def normalize_nationwide_state_code(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized.lower() in {"", "de", "deutschland", "deutschlandweit", "all"}:
+                return None
+            return normalized
+        return value
 
 
 class RecommendationIndicatorDetail(BaseModel):

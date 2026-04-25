@@ -78,9 +78,14 @@
         <article
           v-for="item in climateStats"
           :key="item.label"
-          class="cursor-pointer rounded-lg border border-amber-200 bg-white/80 p-4 transition"
+          class="cursor-pointer rounded-lg border border-amber-200 bg-white/80 p-4 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
           :class="selectedClimateStationKey === item.indicatorKey ? 'border-amber-400 bg-amber-100' : 'hover:border-amber-300 hover:bg-amber-50/80'"
+          role="button"
+          tabindex="0"
+          :aria-pressed="selectedClimateStationKey === item.indicatorKey"
           @click="toggleClimateStation(item.indicatorKey)"
+          @keydown.enter.prevent="toggleClimateStation(item.indicatorKey)"
+          @keydown.space.prevent="toggleClimateStation(item.indicatorKey)"
         >
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">{{ item.value }}</p>
@@ -142,11 +147,10 @@
         <article
           v-for="station in detail.air_stations"
           :key="station.indicator_key"
-          class="cursor-pointer rounded-lg border p-4 transition"
+          class="rounded-lg border p-4 transition"
           :class="selectedAirStationKey === station.indicator_key
             ? 'border-sky-400 bg-sky-50'
             : 'border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50/50'"
-          @click="toggleAirStation(station.indicator_key)"
         >
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ station.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">
@@ -190,9 +194,14 @@
             Koordinaten {{ formatStationCoordinate(station.latitude) }}, {{ formatStationCoordinate(station.longitude) }}
           </p>
           <p class="mt-1 text-xs text-slate-500">Stations-ID {{ station.station_id }}</p>
-          <p class="mt-3 text-xs font-medium text-sky-700">
+          <button
+            type="button"
+            class="mt-3 text-left text-xs font-medium text-sky-700 underline decoration-sky-300 underline-offset-4"
+            :aria-pressed="selectedAirStationKey === station.indicator_key"
+            @click="toggleAirStation(station.indicator_key)"
+          >
             {{ selectedAirStationKey === station.indicator_key ? 'Marker auf Karte fokussiert' : 'Marker auf Karte anzeigen' }}
-          </p>
+          </button>
         </article>
       </div>
       <p v-else class="text-sm text-amber-700">
@@ -210,10 +219,17 @@
 
       <div v-if="detail.amenity_stats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <article v-for="item in detail.amenity_stats" :key="item.category"
-          class="cursor-pointer rounded-lg border p-4 transition" :class="selectedAmenityCategory === item.category
+          class="cursor-pointer rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200" :class="selectedAmenityCategory === item.category
             ? 'border-emerald-400 bg-emerald-100'
             : 'border-emerald-200 bg-white/80 hover:border-emerald-300 hover:bg-emerald-50/80'
-            " @click="toggleAmenityPois(item.category)">
+            "
+          role="button"
+          tabindex="0"
+          :aria-pressed="selectedAmenityCategory === item.category"
+          @click="toggleAmenityPois(item.category)"
+          @keydown.enter.prevent="toggleAmenityPois(item.category)"
+          @keydown.space.prevent="toggleAmenityPois(item.category)"
+        >
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(item.count_total) }}</p>
           <p class="mt-3 text-xs font-medium text-emerald-700">
@@ -236,10 +252,17 @@
 
       <div v-if="detail.accident_stats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <article v-for="item in detail.accident_stats" :key="item.category"
-          class="cursor-pointer rounded-lg border p-4 transition" :class="selectedAccidentCategory === item.category
+          class="cursor-pointer rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-200" :class="selectedAccidentCategory === item.category
             ? 'border-rose-400 bg-rose-100'
             : 'border-rose-200 bg-white/80 hover:border-rose-300 hover:bg-rose-50/80'
-            " @click="toggleAccidentPois(item.category)">
+            "
+          role="button"
+          tabindex="0"
+          :aria-pressed="selectedAccidentCategory === item.category"
+          @click="toggleAccidentPois(item.category)"
+          @keydown.enter.prevent="toggleAccidentPois(item.category)"
+          @keydown.space.prevent="toggleAccidentPois(item.category)"
+        >
           <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ item.label }}</p>
           <p class="mt-2 text-2xl font-semibold text-slate-900">{{ formatCount(item.count_total) }}</p>
           <p class="mt-1 text-xs text-slate-500">gesamt</p>

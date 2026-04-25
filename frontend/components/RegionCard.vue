@@ -19,7 +19,19 @@
       </div>
     </div>
 
-    <div class="space-y-2">
+    <div class="space-y-2 sm:hidden">
+      <ScoreBar
+        v-for="category in mobileCategories"
+        :key="category.key"
+        :label="category.label"
+        :value="category.value"
+        :card-class="category.cardClass"
+        :badge-class="category.badgeClass"
+        :bar-class="category.barClass"
+      />
+    </div>
+
+    <div class="hidden space-y-2 sm:block">
       <ScoreBar
         label="Klima"
         :value="item.score_climate"
@@ -73,83 +85,13 @@
 
     <p v-if="showProfileContext" class="mt-3 text-sm text-slate-600">{{ item.reason }}</p>
 
-    <details class="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-      <summary class="cursor-pointer font-semibold text-slate-900">
-        {{ showProfileContext ? 'Berechnung und Datenbasis anzeigen' : 'Vergleichsdaten anzeigen' }}
-      </summary>
-
-      <div class="mt-3 space-y-3">
-        <div v-if="showProfileContext">
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Score-Formel</p>
-          <p class="mt-1">{{ item.score_formula }}</p>
-        </div>
-
-        <div v-if="showProfileContext">
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Warum dieses Ergebnis?</p>
-          <ul class="mt-1 list-disc space-y-1 pl-5">
-            <li v-for="detail in item.calculation_details" :key="detail">{{ detail }}</li>
-          </ul>
-        </div>
-
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Datenabdeckung</p>
-          <p class="mt-1 text-xs text-slate-600">
-            {{ coverageText(item) }}
-          </p>
-        </div>
-
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Datenbasis und Aktualität</p>
-          <p class="mt-1 text-xs text-slate-600">
-            {{ freshnessText(item) }}
-          </p>
-          <p v-if="sourceSummary(item)" class="mt-1 text-xs text-slate-500">
-            Quellen: {{ sourceSummary(item) }}
-          </p>
-        </div>
-
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Qualitätshinweise</p>
-          <p
-            class="mt-1 text-xs"
-            :class="qualityWarningNotes(item).length ? 'text-amber-700' : 'text-emerald-700'"
-          >
-            {{ qualitySummaryText(item) }}
-          </p>
-          <ul v-if="qualityWarningNotes(item).length" class="mt-2 space-y-1 text-xs text-amber-800">
-            <li v-for="note in qualityWarningNotes(item)" :key="note">
-              {{ note }}
-            </li>
-          </ul>
-        </div>
-
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Rohdaten und Teil-Scores</p>
-          <div class="mt-2 grid gap-2">
-            <div
-              v-for="indicator in item.indicators"
-              :key="indicator.key"
-              class="rounded-lg border p-2"
-              :class="indicatorCategoryTheme(indicator.category).cardClass"
-            >
-              <div class="flex items-start justify-between gap-3">
-                <p class="font-medium">{{ indicator.name }}</p>
-                <span
-                  class="rounded-full px-2 py-0.5 text-xs font-semibold"
-                  :class="indicatorCategoryTheme(indicator.category).badgeClass"
-                >
-                  {{ categoryLabel(indicator.category) }}
-                </span>
-              </div>
-              <p class="mt-1 text-xs text-slate-700">{{ indicator.text }}</p>
-              <p v-if="indicator.quality_flag !== 'ok'" class="mt-1 text-xs text-amber-700">
-                Datenqualität: {{ indicator.quality_flag }}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </details>
+    <ResultDeltaSummary
+      v-if="deltaReference"
+      class="mt-3"
+      :item="item"
+      :reference="deltaReference"
+      :title="deltaTitle"
+    />
 
     <NuxtLink :to="`/region/${item.slug}`" class="mt-3 inline-block text-sm font-semibold text-blue-700">
       Details ansehen
@@ -158,68 +100,46 @@
 </template>
 
 <script setup lang="ts">
-import type { RecommendationItem } from '~/types/api'
+import ResultDeltaSummary from '~/components/ResultDeltaSummary.vue'
+import type { RecommendationInput, RecommendationItem } from '~/types/api'
+import { getCategoryScore, getCategoryWeight, recommendationCategories } from '~/utils/recommendationConfig'
 
 import ScoreBar from './ScoreBar.vue'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   item: RecommendationItem
   showProfileContext?: boolean
+  profilePreferences?: RecommendationInput | null
+  deltaReference?: RecommendationItem | null
+  deltaTitle?: string
 }>(), {
-  showProfileContext: true
+  showProfileContext: true,
+  profilePreferences: null,
+  deltaReference: null,
+  deltaTitle: 'Warum dieses Ergebnis?'
 })
 
-const categoryLabels: Record<string, string> = {
-  climate: 'Klima',
-  air: 'Luftqualität',
-  safety: 'Verkehrssicherheit',
-  demographics: 'Demografie/Familie',
-  amenities: 'Alltagsnähe',
-  landuse: 'Flächennutzung',
-  oepnv: 'ÖPNV'
-}
+const allCategories = computed(() => recommendationCategories.map((category) => ({
+  ...category,
+  value: getCategoryScore(props.item, category.key),
+  weight: props.profilePreferences ? getCategoryWeight(props.profilePreferences, category.key) : 0
+})))
 
-const categoryThemes: Record<string, { cardClass: string; badgeClass: string }> = {
-  climate: {
-    cardClass: 'border-amber-200 bg-amber-50/70',
-    badgeClass: 'bg-amber-100 text-amber-800'
-  },
-  air: {
-    cardClass: 'border-sky-200 bg-sky-50/70',
-    badgeClass: 'bg-sky-100 text-sky-800'
-  },
-  safety: {
-    cardClass: 'border-rose-200 bg-rose-50/70',
-    badgeClass: 'bg-rose-100 text-rose-800'
-  },
-  demographics: {
-    cardClass: 'border-violet-200 bg-violet-50/70',
-    badgeClass: 'bg-violet-100 text-violet-800'
-  },
-  amenities: {
-    cardClass: 'border-emerald-200 bg-emerald-50/70',
-    badgeClass: 'bg-emerald-100 text-emerald-800'
-  },
-  landuse: {
-    cardClass: 'border-orange-200 bg-orange-50/70',
-    badgeClass: 'bg-orange-100 text-orange-800'
-  },
-  oepnv: {
-    cardClass: 'border-indigo-200 bg-indigo-50/70',
-    badgeClass: 'bg-indigo-100 text-indigo-800'
+const mobileCategories = computed(() => {
+  const categories = [...allCategories.value]
+  if (!props.profilePreferences) {
+    return categories.sort((left, right) => right.value - left.value).slice(0, 3)
   }
-}
 
-function categoryLabel(category: string) {
-  return categoryLabels[category] || category
-}
-
-function indicatorCategoryTheme(category: string) {
-  return categoryThemes[category] || {
-    cardClass: 'border-slate-200 bg-white',
-    badgeClass: 'bg-slate-100 text-slate-700'
-  }
-}
+  return categories
+    .sort((left, right) => {
+      if (right.weight !== left.weight) {
+        return right.weight - left.weight
+      }
+      return right.value - left.value
+    })
+    .slice(0, 3)
+})
 
 function regionMetaLine(item: RecommendationItem) {
   return [
@@ -227,76 +147,5 @@ function regionMetaLine(item: RecommendationItem) {
     item.state_name,
     item.district_name
   ].filter(Boolean).join(' · ')
-}
-
-function coverageText(item: RecommendationItem) {
-  const entries: Array<[string, number]> = [
-    ['Klima', item.coverage_climate],
-    ['Luftqualität', item.coverage_air],
-    ['Verkehrssicherheit', item.coverage_safety],
-    ['Demografie/Familie', item.coverage_demographics],
-    ['Alltagsnähe', item.coverage_amenities],
-    ['Flächennutzung', item.coverage_landuse],
-    ['ÖPNV', item.coverage_oepnv]
-  ]
-  const coverageValues = entries.map(([, coverage]) => coverage)
-  const hasCoverageMetadata = coverageValues.some((coverage) => coverage > 0)
-
-  if (!hasCoverageMetadata) {
-    return 'Für diesen Datenstand liegen noch keine separat berechneten Abdeckungswerte vor.'
-  }
-
-  return entries
-    .filter(([, coverage]) => coverage < 1)
-    .map(([label, coverage]) => `${label} ${Math.round(coverage * 100)} %`)
-    .join(' · ') || 'Alle Kategorien sind vollständig mit Daten abgedeckt.'
-}
-
-function freshnessText(item: RecommendationItem) {
-  const dates = item.indicators
-    .map((indicator) => indicator.updated_at)
-    .filter((value): value is string => Boolean(value))
-    .map((value) => new Date(value))
-    .filter((value) => !Number.isNaN(value.getTime()))
-
-  if (!dates.length) {
-    return 'Für diese Ergebniskarte liegt noch kein aggregierter Aktualitätszeitpunkt vor.'
-  }
-
-  const latest = new Date(Math.max(...dates.map((value) => value.getTime())))
-  return `Neuester berücksichtigter Datenstand: ${formatDate(latest)}.`
-}
-
-function sourceSummary(item: RecommendationItem) {
-  const sources = [...new Set(item.indicators.map((indicator) => indicator.source_name).filter(Boolean))]
-  return sources.join(', ')
-}
-
-function qualityWarningNotes(item: RecommendationItem) {
-  const grouped = new Map<string, string[]>()
-  for (const indicator of item.indicators) {
-    if (indicator.quality_flag === 'ohne besonderen Hinweis') {
-      continue
-    }
-    const current = grouped.get(indicator.quality_flag) || []
-    current.push(indicator.name)
-    grouped.set(indicator.quality_flag, current)
-  }
-
-  return [...grouped.entries()].map(([flag, indicators]) => `${flag}: ${indicators.join(', ')}.`)
-}
-
-function qualitySummaryText(item: RecommendationItem) {
-  return qualityWarningNotes(item).length
-    ? 'Für dieses Ergebnis gibt es Qualitäts- oder Proxy-Hinweise.'
-    : 'Keine besonderen Qualitätswarnungen für dieses Ergebnis.'
-}
-
-function formatDate(value: Date) {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  }).format(value)
 }
 </script>

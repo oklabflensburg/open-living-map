@@ -1,7 +1,12 @@
 from sqlmodel import Session
 
 from app.models.preference import UserPreferenceSession
-from app.repositories.score_repository import ScoreRepository
+from app.repositories.score_repository import (
+    URBANITY_BLEND_WEIGHT,
+    URBANITY_POPULATION_CEILING,
+    URBANITY_POPULATION_FLOOR,
+    ScoreRepository,
+)
 from app.schemas.recommendation import (
     RecommendationIndicatorDetail,
     RecommendationInput,
@@ -83,6 +88,58 @@ AMENITY_LABELS = {
     "library": "Bibliotheken",
 }
 
+URBAN_PRESET_KEY = "urban"
+NATIONWIDE_CANDIDATE_POOL_MIN = 100
+NATIONWIDE_CANDIDATE_POOL_MULTIPLIER = 10
+
+PRESET_WEIGHTS: dict[str, dict[str, int]] = {
+    "family": {
+        "climate_weight": 3,
+        "air_weight": 3,
+        "safety_weight": 4,
+        "demographics_weight": 5,
+        "amenities_weight": 5,
+        "landuse_weight": 3,
+        "oepnv_weight": 3,
+    },
+    "transit": {
+        "climate_weight": 2,
+        "air_weight": 3,
+        "safety_weight": 3,
+        "demographics_weight": 1,
+        "amenities_weight": 4,
+        "landuse_weight": 2,
+        "oepnv_weight": 5,
+    },
+    "air-climate": {
+        "climate_weight": 5,
+        "air_weight": 5,
+        "safety_weight": 2,
+        "demographics_weight": 1,
+        "amenities_weight": 2,
+        "landuse_weight": 3,
+        "oepnv_weight": 2,
+    },
+    "urban": {
+        "climate_weight": 2,
+        "air_weight": 2,
+        "safety_weight": 2,
+        "demographics_weight": 2,
+        "amenities_weight": 5,
+        "landuse_weight": 1,
+        "oepnv_weight": 5,
+    },
+    "quiet-nature": {
+        "climate_weight": 4,
+        "air_weight": 4,
+        "safety_weight": 3,
+        "demographics_weight": 1,
+        "amenities_weight": 2,
+        "landuse_weight": 5,
+        "oepnv_weight": 2,
+    },
+}
+
 
 class ScoringService:
     def __init__(self, session: Session) -> None:
@@ -92,6 +149,17 @@ class ScoringService:
     @staticmethod
     def amenity_label(category: str) -> str:
         return AMENITY_LABELS.get(category, category)
+
+    @staticmethod
+    def apply_preset_weights(
+        preferences: RecommendationInput
+    ) -> RecommendationInput:
+        if preferences.preset is None:
+            return preferences
+        preset_weights = PRESET_WEIGHTS.get(preferences.preset)
+        if preset_weights is None:
+            return preferences
+        return preferences.model_copy(update=preset_weights)
 
     @staticmethod
     def _effective_weight_keys(
@@ -107,11 +175,86 @@ class ScoringService:
         return covered_keys or weighted_keys
 
     @staticmethod
+    def _coverage_confidence(
+        weights: dict[str, int],
+        coverage: dict[str, float] | None = None,
+    ) -> float:
+        weighted_denominator = sum(weight for weight in weights.values() if weight > 0)
+        if weighted_denominator == 0:
+            return 0.0
+        if coverage is None:
+            return 1.0
+
+        covered_denominator = sum(
+            weight * coverage.get(key, 0.0)
+            for key, weight in weights.items()
+            if weight > 0 and coverage.get(key, 0.0) > 0
+        )
+        return covered_denominator / weighted_denominator
+
+    @staticmethod
+    def coverage_adjusted_total(
+        category_scores: dict[str, float],
+        coverage: dict[str, float],
+    ) -> float:
+        if not category_scores:
+            return 0.0
+        return round(
+            sum(
+                category_scores[key] * coverage.get(key, 0.0)
+                for key in category_scores
+            ) / len(category_scores),
+            2,
+        )
+
+    @staticmethod
+    def _nationwide_candidate_limit(limit: int) -> int:
+        return max(limit, NATIONWIDE_CANDIDATE_POOL_MIN, limit * NATIONWIDE_CANDIDATE_POOL_MULTIPLIER)
+
+    @staticmethod
+    def _nationwide_state_cap(limit: int) -> int:
+        return max(1, (limit + 3) // 4)
+
+    @staticmethod
+    def _select_nationwide_rows(
+        rows: list[tuple[object, object]],
+        limit: int,
+    ) -> list[tuple[object, object]]:
+        if limit <= 0:
+            return []
+
+        selected: list[tuple[object, object]] = []
+        deferred: list[tuple[object, object]] = []
+        state_counts: dict[str, int] = {}
+        state_cap = ScoringService._nationwide_state_cap(limit)
+
+        for row in rows:
+            region = row[0]
+            state_code = str(getattr(region, "state_code", "") or getattr(region, "state_name", ""))
+            if state_counts.get(state_code, 0) < state_cap:
+                selected.append(row)
+                state_counts[state_code] = state_counts.get(state_code, 0) + 1
+            else:
+                deferred.append(row)
+
+            if len(selected) >= limit:
+                return selected[:limit]
+
+        for row in deferred:
+            selected.append(row)
+            if len(selected) >= limit:
+                break
+
+        return selected[:limit]
+
+    @staticmethod
     def weighted_total(
         category_scores: dict[str, float],
         preferences: RecommendationInput,
         coverage: dict[str, float] | None = None,
+        population: int | None = None,
     ) -> float:
+        preferences = ScoringService.apply_preset_weights(preferences)
         weights = {
             "climate": preferences.climate_weight,
             "air": preferences.air_weight,
@@ -123,13 +266,42 @@ class ScoringService:
         }
         effective_keys = ScoringService._effective_weight_keys(
             weights, coverage)
-        denominator = sum(weights[key] for key in effective_keys)
+        denominator = sum(
+            weights[key] * (coverage.get(key, 1.0) if coverage is not None else 1.0)
+            for key in effective_keys
+        )
         if denominator == 0:
             return 0.0
         numerator = sum(
-            category_scores[key] * weights[key] for key in effective_keys
+            category_scores[key]
+            * weights[key]
+            * (coverage.get(key, 1.0) if coverage is not None else 1.0)
+            for key in effective_keys
         )
-        return round(numerator / denominator, 2)
+        score = (numerator / denominator) * ScoringService._coverage_confidence(
+            weights,
+            coverage,
+        )
+        if preferences.preset == URBAN_PRESET_KEY:
+            urbanity_score = ScoringService.urbanity_score(population)
+            score = (
+                score * (1.0 - URBANITY_BLEND_WEIGHT)
+                + urbanity_score * URBANITY_BLEND_WEIGHT
+            ) * ScoringService._coverage_confidence(weights, coverage)
+        return round(score, 2)
+
+    @staticmethod
+    def urbanity_score(population: int | None) -> float:
+        if population is None or population <= URBANITY_POPULATION_FLOOR:
+            return 0.0
+        if population >= URBANITY_POPULATION_CEILING:
+            return 100.0
+
+        from math import log
+
+        log_floor = log(URBANITY_POPULATION_FLOOR)
+        log_range = log(URBANITY_POPULATION_CEILING) - log_floor
+        return ((log(population) - log_floor) / log_range) * 100
 
     @staticmethod
     def preferences_for_category(
@@ -151,11 +323,14 @@ class ScoringService:
         weights[weight_key] = 5
         return RecommendationInput(**weights, state_code=state_code)
 
-    def _persist_preference_session(self, preferences: RecommendationInput) -> None:
+    def _persist_preference_session(
+        self,
+        preferences: RecommendationInput
+    ) -> None:
         """Persist user preference session for analytics.
 
-        Note: This is disabled by default for privacy reasons. Enable only if you have
-        a clear purpose and retention policy documented.
+        Note: This is disabled by default for privacy reasons. Enable only
+        if you have a clear purpose and retention policy documented.
         """
         # Check if persistence is enabled via environment variable
         import os
@@ -180,6 +355,7 @@ class ScoringService:
     def _cleanup_old_sessions(self, days: int = 30) -> None:
         """Clean up user preference sessions older than specified days."""
         from datetime import datetime, timedelta
+
         from sqlalchemy import delete
 
         cutoff_date = datetime.utcnow() - timedelta(days=days)
@@ -346,7 +522,8 @@ class ScoringService:
             for key, weight in weights.items()
             if key in effective_keys
         ]
-        score_formula = f"Gesamtscore = ({' + '.join(formula_parts)}) / {denominator}"
+        base_formula = f"({' + '.join(formula_parts)}) / {denominator}"
+        score_formula = f"Profilscore = {base_formula}"
 
         details = [
             (
@@ -357,6 +534,16 @@ class ScoringService:
             for key, weight in weights.items()
             if key in effective_keys
         ]
+        if preferences.preset == URBAN_PRESET_KEY:
+            urbanity = self.urbanity_score(region_population)
+            score_formula = (
+                f"Profilscore = {base_formula} x {1.0 - URBANITY_BLEND_WEIGHT:.2f} "
+                f"+ Urbanität {urbanity:.1f} x {URBANITY_BLEND_WEIGHT:.2f}"
+            )
+            details.append(
+                "Das Profil „Urban & alltagsnah“ ergänzt die gewichteten Kategorien um einen begrenzten "
+                f"Urbanitätsanteil aus der Einwohnerzahl: {urbanity:.1f} von 100."
+            )
 
         has_any_coverage = any(coverage.get(key, 0.0) > 0 for key in weights)
         for key, weight in weights.items():
@@ -453,6 +640,7 @@ class ScoringService:
         include_details: bool = True,
         persist_session: bool = False,
     ) -> RecommendationResponse:
+        preferences = self.apply_preset_weights(preferences)
         if persist_session:
             self._persist_preference_session(preferences)
         weights = self._weights(preferences)
@@ -462,11 +650,29 @@ class ScoringService:
                 state_code=preferences.state_code,
             )
         else:
+            repository_limit = (
+                self._nationwide_candidate_limit(limit)
+                if preferences.state_code is None
+                else limit
+            )
             rows = self.repository.list_ranked_snapshots_by_preferences(
                 weights=weights,
                 state_code=preferences.state_code,
-                limit=limit,
+                min_scores={
+                    "climate": preferences.min_climate_score,
+                    "air": preferences.min_air_score,
+                    "safety": preferences.min_safety_score,
+                    "demographics": preferences.min_demographics_score,
+                    "amenities": preferences.min_amenities_score,
+                    "landuse": preferences.min_landuse_score,
+                    "oepnv": preferences.min_oepnv_score,
+                },
+                coverage_min=preferences.coverage_min,
+                urbanity_boost=preferences.preset == URBAN_PRESET_KEY,
+                limit=repository_limit,
             )
+            if preferences.state_code is None:
+                rows = self._select_nationwide_rows(rows, limit)
 
         items: list[RecommendationItem] = []
         for region, snapshot in rows:
@@ -488,7 +694,12 @@ class ScoringService:
                 "landuse": snapshot.coverage_landuse,
                 "oepnv": snapshot.coverage_oepnv,
             }
-            total = self.weighted_total(category_scores, preferences, coverage)
+            total = self.weighted_total(
+                category_scores,
+                preferences,
+                coverage,
+                region.population,
+            )
             items.append(
                 RecommendationItem(
                     ars=region.ars,
@@ -499,7 +710,7 @@ class ScoringService:
                     district_name=region.district_name,
                     centroid_lat=region.centroid_lat,
                     centroid_lon=region.centroid_lon,
-                    score_total=snapshot.score_total,
+                    score_total=self.coverage_adjusted_total(category_scores, coverage),
                     score_profile=total,
                     score_climate=snapshot.score_climate,
                     score_air=snapshot.score_air,
@@ -594,6 +805,16 @@ class ScoringService:
                 "landuse": snapshot.score_landuse,
                 "oepnv": snapshot.score_oepnv,
             }
+            coverage = {
+                "climate": snapshot.coverage_climate,
+                "air": snapshot.coverage_air,
+                "safety": snapshot.coverage_safety,
+                "demographics": snapshot.coverage_demographics,
+                "amenities": snapshot.coverage_amenities,
+                "landuse": snapshot.coverage_landuse,
+                "oepnv": snapshot.coverage_oepnv,
+            }
+            adjusted_total = self.coverage_adjusted_total(category_scores, coverage)
             items.append(
                 RecommendationItem(
                     ars=region.ars,
@@ -604,8 +825,8 @@ class ScoringService:
                     district_name=region.district_name,
                     centroid_lat=region.centroid_lat,
                     centroid_lon=region.centroid_lon,
-                    score_total=snapshot.score_total,
-                    score_profile=snapshot.score_total,
+                    score_total=adjusted_total,
+                    score_profile=adjusted_total,
                     score_climate=snapshot.score_climate,
                     score_air=snapshot.score_air,
                     score_safety=snapshot.score_safety,
@@ -613,13 +834,13 @@ class ScoringService:
                     score_amenities=snapshot.score_amenities,
                     score_landuse=snapshot.score_landuse,
                     score_oepnv=snapshot.score_oepnv,
-                    coverage_climate=snapshot.coverage_climate,
-                    coverage_air=snapshot.coverage_air,
-                    coverage_safety=snapshot.coverage_safety,
-                    coverage_demographics=snapshot.coverage_demographics,
-                    coverage_amenities=snapshot.coverage_amenities,
-                    coverage_landuse=snapshot.coverage_landuse,
-                    coverage_oepnv=snapshot.coverage_oepnv,
+                    coverage_climate=coverage["climate"],
+                    coverage_air=coverage["air"],
+                    coverage_safety=coverage["safety"],
+                    coverage_demographics=coverage["demographics"],
+                    coverage_amenities=coverage["amenities"],
+                    coverage_landuse=coverage["landuse"],
+                    coverage_oepnv=coverage["oepnv"],
                     trust_updated_at=snapshot.updated_at.isoformat() if snapshot.updated_at else None,
                     reason=build_reason(category_scores, preferences),
                 )

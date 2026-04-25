@@ -7,8 +7,8 @@ from app.schemas.region import (
     AirStationInfo,
     AmenityStat,
     CategoryFreshness,
-    ClimateStationInfo,
     CategoryQualitySummary,
+    ClimateStationInfo,
     LandUseStat,
     RegionBase,
     RegionDetailResponse,
@@ -75,7 +75,7 @@ class RegionService:
             oepnv_weight=1,
         )
         scores = {
-            "total": snapshot.score_total if snapshot else 0.0,
+            "total": ScoringService.coverage_adjusted_total(category_scores, coverage),
             **category_scores,
         }
 

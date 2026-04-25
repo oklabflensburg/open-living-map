@@ -15,3 +15,15 @@
     border-radius: 0.5rem;
   }
 }
+
+@media print {
+  nav,
+  button,
+  details summary {
+    break-inside: avoid;
+  }
+
+  body {
+    background: #ffffff;
+  }
+}

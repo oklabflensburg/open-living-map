@@ -1,45 +1,66 @@
 <template>
   <section class="mx-auto max-w-7xl space-y-6">
-    <div class="space-y-2">
-      <h1 class="text-2xl font-bold">Gewichtungen festlegen</h1>
-      <p class="max-w-3xl text-sm text-slate-600">
-        Lege fest, welche Themen für dich wichtig sind. Die linke Spalte steuert die Gewichtung, die rechte Spalte
-        zeigt direkt, wie der Score zusammengesetzt ist und welche Kennzahlen dahinterstehen.
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Finder</p>
+      <h1 class="mt-2 text-2xl font-bold text-slate-950 sm:text-3xl">Suchprofil für deinen Wohnort einstellen</h1>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+        Wähle ein Profil, passe Gewichte an und begrenze die Treffermenge mit harten Filtern.
+        Links siehst du sofort, welche Kriterien dein Ranking gerade prägen.
       </p>
     </div>
 
-    <div class="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)] xl:items-start">
-      <div class="xl:sticky xl:top-28">
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.85fr)] xl:items-start">
+      <div class="order-first space-y-4 xl:order-last xl:sticky xl:top-28">
         <PreferenceForm v-model="form" @submit="submit" />
+        <FinderFilterPanel v-model="form" title="Filter setzen" />
       </div>
 
       <div class="space-y-6">
-        <div class="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 class="text-lg font-semibold">So wird dein Score berechnet</h2>
-          <p class="text-sm text-slate-700">
-            Jede Kategorie hat einen Teil-Score von 0 bis 100. Diese Teil-Scores werden mit deinen Gewichten (0 bis 5)
-            kombiniert. Wenn alle Gewichte 0 sind, ist der Gesamtscore 0.
-          </p>
-
-          <div class="rounded bg-slate-50 p-3 text-xs text-slate-700">
-            <p class="font-semibold">Formel</p>
-            <p>
-              Gesamt = (Klima×{{ form.climate_weight }} + Luft×{{ form.air_weight }} + Sicherheit×{{ form.safety_weight
-              }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + Flächennutzung×{{ form.landuse_weight }} + ÖPNV×{{
-                form.oepnv_weight
-              }}) / {{ weightSum }}
-            </p>
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div class="border-b border-slate-100 p-5 sm:p-6" :class="activePresetPanelClass">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Aktuelles Suchprofil</p>
+                <h2 class="mt-2 text-xl font-bold text-slate-950">{{ activePresetTitle }}</h2>
+                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{{ activePresetDescription }}</p>
+              </div>
+              <span class="rounded-full px-3 py-1 text-xs font-semibold" :class="activePresetBadgeClass">
+                {{ selectedStateText }}
+              </span>
+            </div>
           </div>
 
-          <div class="text-xs text-slate-600">
-            Effektive Anteile:
-            Klima {{ effectiveWeights.climate }}% ·
-            Luft {{ effectiveWeights.air }}% ·
-            Sicherheit {{ effectiveWeights.safety }}% ·
-            Demografie {{ effectiveWeights.demographics }}% ·
-            Alltagsnähe {{ effectiveWeights.amenities }}% ·
-            Flächennutzung {{ effectiveWeights.landuse }}% ·
-            ÖPNV {{ effectiveWeights.oepnv }}%
+          <div class="p-5 sm:p-6">
+            <div class="space-y-4">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900">Stärkste Treiber</h3>
+                <div class="mt-3 grid gap-3 sm:grid-cols-3">
+                  <article
+                    v-for="entry in topWeightedCategories"
+                    :key="entry.label"
+                    class="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ entry.label }}</p>
+                    <p class="mt-2 text-2xl font-bold text-slate-950">{{ entry.weight }}/5</p>
+                    <p class="mt-1 text-xs text-slate-500">{{ entry.share }} % Anteil</p>
+                  </article>
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <div
+                  v-for="entry in allWeightBars"
+                  :key="entry.key"
+                  class="grid grid-cols-[8rem_minmax(0,1fr)_3rem] items-center gap-3 text-sm"
+                >
+                  <span class="truncate font-medium text-slate-700">{{ entry.label }}</span>
+                  <span class="h-2 rounded-full bg-slate-100">
+                    <span class="block h-2 rounded-full" :class="entry.barClass" :style="{ width: `${entry.share}%` }" />
+                  </span>
+                  <span class="text-right text-xs font-semibold text-slate-500">{{ entry.share }}%</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -68,11 +89,29 @@
             <p class="mt-2 text-sm text-slate-800">
               {{ rankingFocusText }}
             </p>
+            <p class="mt-3 text-xs text-slate-600">
+              Filter: {{ currentFilterText }}
+            </p>
           </div>
         </div>
 
-        <div class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 class="mb-4 text-lg font-semibold">Welche Werte dahinterstehen</h2>
+        <details open class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <summary class="cursor-pointer text-lg font-semibold text-slate-900">Berechnung und Datenbasis anzeigen</summary>
+          <div class="mt-4 space-y-5">
+            <div class="rounded bg-slate-50 p-3 text-xs text-slate-700">
+              <p class="font-semibold">Formel</p>
+              <p>
+                Gesamt = (Klima×{{ form.climate_weight }} + Luft×{{ form.air_weight }} + Sicherheit×{{ form.safety_weight
+                }} + Demografie×{{ form.demographics_weight }} + Alltagsnähe×{{ form.amenities_weight }} + Flächennutzung×{{ form.landuse_weight }} + ÖPNV×{{
+                  form.oepnv_weight
+                }}) / {{ weightSum }}
+              </p>
+              <p v-if="form.preset === 'urban'" class="mt-2">
+                Urban-Profilscore = gewichteter Score × 0,80 + Urbanitätsfaktor × 0,20.
+              </p>
+            </div>
+
+            <h2 class="text-base font-semibold">Welche Werte dahinterstehen</h2>
           <div class="grid gap-4 md:grid-cols-2">
             <article
               v-for="item in categoryDetails"
@@ -94,16 +133,20 @@
             Hinweis: Alle Indikatoren werden auf 0 bis 100 normiert. Danach wird pro Kategorie gemittelt und anschließend
             mit deinen Gewichten verrechnet.
           </p>
-        </div>
+          </div>
+        </details>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import FinderFilterPanel from '~/components/FinderFilterPanel.vue'
 import PreferenceForm from '~/components/PreferenceForm.vue'
-import { buildPreferenceQuery, parsePreferenceQuery, preferenceQueryEquals } from '~/composables/usePreferenceQuery'
+import { activeFilterTags, buildPreferenceQuery, parsePreferenceQuery, preferenceQueryEquals } from '~/composables/usePreferenceQuery'
+import { getGermanStateName } from '~/composables/useGermanStates'
 import { usePreferencesStore } from '~/stores/preferences'
+import { finderPresetMap } from '~/utils/finderPresets'
 
 const { siteName, absoluteUrl } = useSiteSeo()
 const store = usePreferencesStore()
@@ -198,6 +241,46 @@ const effectiveWeights = computed(() => {
   }
 })
 
+const categoryWeightRows = computed(() => [
+  { key: 'climate', label: 'Klima', weight: form.value.climate_weight, share: effectiveWeights.value.climate, barClass: 'bg-amber-500' },
+  { key: 'air', label: 'Luftqualität', weight: form.value.air_weight, share: effectiveWeights.value.air, barClass: 'bg-sky-500' },
+  { key: 'safety', label: 'Sicherheit', weight: form.value.safety_weight, share: effectiveWeights.value.safety, barClass: 'bg-rose-500' },
+  { key: 'demographics', label: 'Demografie', weight: form.value.demographics_weight, share: effectiveWeights.value.demographics, barClass: 'bg-violet-500' },
+  { key: 'amenities', label: 'Alltagsnähe', weight: form.value.amenities_weight, share: effectiveWeights.value.amenities, barClass: 'bg-emerald-500' },
+  { key: 'landuse', label: 'Fläche', weight: form.value.landuse_weight, share: effectiveWeights.value.landuse, barClass: 'bg-orange-500' },
+  { key: 'oepnv', label: 'ÖPNV', weight: form.value.oepnv_weight, share: effectiveWeights.value.oepnv, barClass: 'bg-indigo-500' }
+])
+
+const allWeightBars = computed(() => categoryWeightRows.value)
+
+const topWeightedCategories = computed(() => {
+  const weighted = categoryWeightRows.value
+    .filter((entry) => entry.weight > 0)
+    .sort((left, right) => {
+      if (right.weight !== left.weight) {
+        return right.weight - left.weight
+      }
+      return right.share - left.share
+    })
+    .slice(0, 3)
+
+  return weighted.length ? weighted : categoryWeightRows.value.slice(0, 3)
+})
+
+const activePreset = computed(() => (form.value.preset ? finderPresetMap[form.value.preset] : null))
+const activePresetTitle = computed(() => activePreset.value?.label || 'Individuelles Profil')
+const activePresetDescription = computed(() => {
+  if (activePreset.value) {
+    return form.value.preset === 'urban'
+      ? `${activePreset.value.description} Zusätzlich fließt ein begrenzter Urbanitätsfaktor aus der Einwohnerzahl ein.`
+      : activePreset.value.description
+  }
+
+  return 'Du hast die Gewichte selbst angepasst. Das Ranking folgt genau dieser individuellen Mischung.'
+})
+const activePresetPanelClass = computed(() => activePreset.value ? activePreset.value.theme.cardClass : 'bg-slate-50')
+const activePresetBadgeClass = computed(() => activePreset.value ? activePreset.value.theme.badgeClass : 'bg-slate-100 text-slate-700')
+
 const rankingFocusText = computed(() => {
   const weighted = [
     { label: 'Klima', weight: form.value.climate_weight },
@@ -227,6 +310,18 @@ const rankingFocusText = computed(() => {
   }
 
   return 'Mehrere Kategorien sind aktuell gleich stark gewichtet. Das Ranking bleibt dadurch breiter und weniger auf einen einzelnen Schwerpunkt zugespitzt.'
+})
+
+const currentFilterText = computed(() => {
+  const tags = activeFilterTags(form.value, selectedStateText.value)
+  return tags.length ? tags.join(' · ') : 'Keine Filter aktiv.'
+})
+
+const selectedStateText = computed(() => {
+  if (!form.value.state_code) {
+    return 'Deutschland'
+  }
+  return getGermanStateName(form.value.state_code)
 })
 
 const categoryDetails = [
