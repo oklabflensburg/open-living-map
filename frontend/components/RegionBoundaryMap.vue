@@ -1,7 +1,7 @@
 <template>
   <ClientOnly>
     <div class="relative">
-      <div ref="container" class="h-96 w-full rounded-xl border border-slate-200" />
+      <div ref="container" class="region-boundary-map h-96 w-full rounded-xl border border-slate-200" />
       <div
         v-if="tilesLoading"
         class="absolute inset-0 z-10 flex items-center justify-center rounded-xl border border-slate-200 bg-white/85 backdrop-blur-sm"
@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 import type { GeoJsonFeatureCollection } from '~/types/api'
-import type { Layer, LatLng } from 'leaflet'
+import type { Control, Layer, LatLng } from 'leaflet'
 
 type AirStationMapInfo = {
   indicator_key: string
@@ -58,6 +58,7 @@ const container = ref<HTMLElement | null>(null)
 const tilesLoading = ref(true)
 let LLeaflet: typeof import('leaflet') | null = null
 let map: import('leaflet').Map | null = null
+let fullscreenControl: Control | null = null
 let boundaryLayer: import('leaflet').GeoJSON | null = null
 let poiLayer: import('leaflet').GeoJSON | null = null
 let airStationLayer: import('leaflet').LayerGroup | null = null
@@ -82,12 +83,61 @@ onMounted(async () => {
     tilesLoading.value = false
   })
   tileLayer.addTo(map)
+  addFullscreenControl()
 
   renderBoundary()
   renderAirStations()
   renderClimateStations()
   renderPois()
+
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
 })
+
+function addFullscreenControl() {
+  if (!LLeaflet || !map) {
+    return
+  }
+
+  const FullscreenControl = LLeaflet.Control.extend({
+    options: {
+      position: 'topleft'
+    },
+    onAdd() {
+      const wrapper = LLeaflet!.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-fullscreen')
+      const button = LLeaflet!.DomUtil.create('a', 'leaflet-control-fullscreen-button', wrapper) as HTMLAnchorElement
+      button.href = '#'
+      button.title = 'Karte im Vollbild anzeigen'
+      button.setAttribute('aria-label', 'Karte im Vollbild anzeigen')
+      button.textContent = '⛶'
+      LLeaflet!.DomEvent.disableClickPropagation(wrapper)
+      LLeaflet!.DomEvent.disableScrollPropagation(wrapper)
+      LLeaflet!.DomEvent.on(button, 'click', LLeaflet!.DomEvent.stop).on(button, 'click', toggleMapFullscreen)
+      return wrapper
+    }
+  })
+
+  fullscreenControl = new FullscreenControl()
+  fullscreenControl.addTo(map)
+}
+
+async function toggleMapFullscreen() {
+  if (!container.value) {
+    return
+  }
+
+  if (document.fullscreenElement === container.value) {
+    await document.exitFullscreen()
+    return
+  }
+
+  await container.value.requestFullscreen()
+}
+
+function handleFullscreenChange() {
+  window.setTimeout(() => {
+    map?.invalidateSize()
+  }, 0)
+}
 
 function renderBoundary() {
   if (!LLeaflet || !map) {
@@ -376,7 +426,29 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  fullscreenControl?.remove()
+  fullscreenControl = null
   map?.remove()
   map = null
 })
 </script>
+
+<style scoped>
+.region-boundary-map:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+:deep(.leaflet-control-fullscreen-button) {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 30px;
+}
+
+:deep(.leaflet-control-fullscreen-button:hover),
+:deep(.leaflet-control-fullscreen-button:focus-visible) {
+  color: #111827;
+}
+</style>

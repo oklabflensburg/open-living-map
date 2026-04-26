@@ -75,7 +75,7 @@
       </div>
 
       <div v-if="climateStats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <article
+        <div
           v-for="item in climateStats"
           :key="item.label"
           class="cursor-pointer rounded-lg border border-amber-200 bg-white/80 p-4 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-200"
@@ -104,7 +104,7 @@
           <p class="mt-3 text-xs font-medium text-amber-700">
             {{ selectedClimateStationKey === item.indicatorKey ? 'Marker auf Karte fokussiert' : 'Marker auf Karte anzeigen' }}
           </p>
-        </article>
+        </div>
       </div>
       <p v-else class="text-sm text-amber-700">
         Für diese Gemeinde sind aktuell keine zusammengefassten Klima-Daten verfügbar.
@@ -218,7 +218,7 @@
       </div>
 
       <div v-if="detail.amenity_stats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <article v-for="item in detail.amenity_stats" :key="item.category"
+        <div v-for="item in detail.amenity_stats" :key="item.category"
           class="cursor-pointer rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200" :class="selectedAmenityCategory === item.category
             ? 'border-emerald-400 bg-emerald-100'
             : 'border-emerald-200 bg-white/80 hover:border-emerald-300 hover:bg-emerald-50/80'
@@ -235,7 +235,7 @@
           <p class="mt-3 text-xs font-medium text-emerald-700">
             {{ selectedAmenityCategory === item.category ? 'POIs auf Karte ausblenden' : 'POIs auf Karte anzeigen' }}
           </p>
-        </article>
+        </div>
       </div>
       <p v-else class="text-sm text-amber-700">
         Für diese Gemeinde sind aktuell keine OSM-Alltagsnähe-Daten nach Kategorien geladen.
@@ -251,7 +251,7 @@
       </div>
 
       <div v-if="detail.accident_stats.length" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <article v-for="item in detail.accident_stats" :key="item.category"
+        <div v-for="item in detail.accident_stats" :key="item.category"
           class="cursor-pointer rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-200" :class="selectedAccidentCategory === item.category
             ? 'border-rose-400 bg-rose-100'
             : 'border-rose-200 bg-white/80 hover:border-rose-300 hover:bg-rose-50/80'
@@ -269,7 +269,7 @@
           <p class="mt-3 text-xs font-medium text-rose-700">
             {{ selectedAccidentCategory === item.category ? 'Unfallorte auf Karte ausblenden' : 'Unfallorte auf Karte anzeigen' }}
           </p>
-        </article>
+        </div>
       </div>
       <p v-else class="text-sm text-amber-700">
         Für diese Gemeinde sind aktuell keine Unfallatlas-Daten nach Kategorien geladen.
@@ -331,6 +331,19 @@
               </span>
             </div>
             <p class="mt-1 text-sm text-slate-700">{{ indicator.text }}</p>
+            <div class="mt-3" :aria-label="`Normierter Teil-Score ${formatScoreValue(indicator.normalized_value)} von 100`">
+              <div class="mb-1 flex items-center justify-between gap-3 text-xs">
+                <span class="font-medium text-slate-600">Normierter Teil-Score</span>
+                <span class="font-semibold text-slate-800">{{ formatScoreValue(indicator.normalized_value) }}</span>
+              </div>
+              <div class="h-2.5 rounded-full bg-white/80">
+                <div
+                  class="h-2.5 rounded-full"
+                  :class="indicatorCategoryTheme(indicator.category).barClass"
+                  :style="{ width: `${normalizedScoreWidth(indicator.normalized_value)}%` }"
+                />
+              </div>
+            </div>
             <p v-if="indicator.quality_flag !== 'ok'" class="mt-1 text-xs text-amber-700">
               Datenqualität: {{ indicator.quality_flag }}
             </p>
@@ -524,34 +537,41 @@ const categoryLabels: Record<string, string> = {
   oepnv: 'ÖPNV'
 }
 
-const categoryThemes: Record<string, { cardClass: string; badgeClass: string }> = {
+const categoryThemes: Record<string, { cardClass: string; badgeClass: string; barClass: string }> = {
   climate: {
     cardClass: 'border-amber-200 bg-amber-50/70',
-    badgeClass: 'bg-amber-100 text-amber-800'
+    badgeClass: 'bg-amber-100 text-amber-800',
+    barClass: 'bg-amber-600'
   },
   air: {
     cardClass: 'border-sky-200 bg-sky-50/70',
-    badgeClass: 'bg-sky-100 text-sky-800'
+    badgeClass: 'bg-sky-100 text-sky-800',
+    barClass: 'bg-sky-600'
   },
   safety: {
     cardClass: 'border-rose-200 bg-rose-50/70',
-    badgeClass: 'bg-rose-100 text-rose-800'
+    badgeClass: 'bg-rose-100 text-rose-800',
+    barClass: 'bg-rose-600'
   },
   demographics: {
     cardClass: 'border-violet-200 bg-violet-50/70',
-    badgeClass: 'bg-violet-100 text-violet-800'
+    badgeClass: 'bg-violet-100 text-violet-800',
+    barClass: 'bg-violet-600'
   },
   amenities: {
     cardClass: 'border-emerald-200 bg-emerald-50/70',
-    badgeClass: 'bg-emerald-100 text-emerald-800'
+    badgeClass: 'bg-emerald-100 text-emerald-800',
+    barClass: 'bg-emerald-600'
   },
   landuse: {
     cardClass: 'border-orange-200 bg-orange-50/70',
-    badgeClass: 'bg-orange-100 text-orange-800'
+    badgeClass: 'bg-orange-100 text-orange-800',
+    barClass: 'bg-orange-600'
   },
   oepnv: {
     cardClass: 'border-indigo-200 bg-indigo-50/70',
-    badgeClass: 'bg-indigo-100 text-indigo-800'
+    badgeClass: 'bg-indigo-100 text-indigo-800',
+    barClass: 'bg-indigo-600'
   }
 }
 
@@ -667,8 +687,13 @@ function categoryLabel(category: string) {
 function indicatorCategoryTheme(category: string) {
   return categoryThemes[category] || {
     cardClass: 'border-slate-200 bg-white',
-    badgeClass: 'bg-slate-100 text-slate-700'
+    badgeClass: 'bg-slate-100 text-slate-700',
+    barClass: 'bg-slate-600'
   }
+}
+
+function normalizedScoreWidth(value: number) {
+  return Math.max(0, Math.min(100, value))
 }
 
 function formatCount(value: number) {
