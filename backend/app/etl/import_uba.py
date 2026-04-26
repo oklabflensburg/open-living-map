@@ -1,6 +1,5 @@
 import logging
 import re
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -203,7 +202,9 @@ def _write_region_air_stations(
     session.commit()
 
 
-def _fetch_measures(component_id: int, days: int = 7) -> dict[str, dict[str, list[float | int | None | str]]]:
+def _fetch_measures(
+    component_id: int, days: int = 7
+) -> dict[str, dict[str, list[float | int | None | str]]]:
     date_to = datetime.now(UTC).date()
     date_from = date_to - timedelta(days=days)
     params = {
@@ -220,16 +221,25 @@ def _fetch_measures(component_id: int, days: int = 7) -> dict[str, dict[str, lis
     return payload.get("data", {})
 
 
-def _fetch_measures_with_fallback(component_id: int) -> dict[str, dict[str, list[float | int | None | str]]]:
+def _fetch_measures_with_fallback(
+    component_id: int,
+) -> dict[str, dict[str, list[float | int | None | str]]]:
     for days in [7, 3, 1]:
         try:
             return _fetch_measures(component_id, days=days)
         except Exception as exc:
-            logger.warning("UBA measures fallback fuer component=%s, days=%s fehlgeschlagen: %s", component_id, days, exc)
+            logger.warning(
+                "UBA measures fallback fuer component=%s, days=%s fehlgeschlagen: %s",
+                component_id,
+                days,
+                exc,
+            )
     return {}
 
 
-def _mean_station_values(measures_data: dict[str, dict[str, list[float | int | None | str]]]) -> dict[str, float]:
+def _mean_station_values(
+    measures_data: dict[str, dict[str, list[float | int | None | str]]],
+) -> dict[str, float]:
     out: dict[str, float] = {}
     for station_id, entries in measures_data.items():
         vals: list[float] = []
@@ -270,7 +280,7 @@ def _batch_write_indicator_values(
         )
     }
 
-    for (municipality_id, raw), normalized in zip(values, normalized_values):
+    for (municipality_id, raw), normalized in zip(values, normalized_values, strict=True):
         existing = existing_rows.get(municipality_id)
         if existing:
             existing.raw_value = round(raw, 4)
@@ -303,12 +313,19 @@ def main() -> None:
         with with_session() as session:
             municipalities = list(session.exec(select(Region).where(Region.level == "gemeinde")))
             municipality_coords = [
-                (municipality.id, municipality.ars, float(municipality.centroid_lat), float(municipality.centroid_lon))
+                (
+                    municipality.id,
+                    municipality.ars,
+                    float(municipality.centroid_lat),
+                    float(municipality.centroid_lon),
+                )
                 for municipality in municipalities
                 if municipality.centroid_lat is not None and municipality.centroid_lon is not None
             ]
             if not municipality_coords:
-                logger.warning("Keine Gemeinde-Zentroide verfuegbar. UBA-Import wird uebersprungen.")
+                logger.warning(
+                    "Keine Gemeinde-Zentroide verfuegbar. UBA-Import wird uebersprungen."
+                )
                 return
 
             try:
@@ -343,7 +360,7 @@ def main() -> None:
                 logger.warning("Keine verwertbaren UBA-Stationen gefunden. Kein Write.")
                 return
 
-        # component ids laut UBA components/json
+            # component ids laut UBA components/json
             defs = [
                 ("no2", "NO2", 5),
                 ("pm10", "PM10", 1),
@@ -359,7 +376,12 @@ def main() -> None:
 
                 station_means = _mean_station_values(measures_data)
                 positioned_station_values = [
-                    (station_id, station_positions[station_id][0], station_positions[station_id][1], value)
+                    (
+                        station_id,
+                        station_positions[station_id][0],
+                        station_positions[station_id][1],
+                        value,
+                    )
                     for station_id, value in station_means.items()
                     if station_id in station_positions
                 ]
@@ -370,7 +392,11 @@ def main() -> None:
                 values = [
                     (municipality_id, nearest_value)
                     for municipality_id, _, municipality_lat, municipality_lon in municipality_coords
-                    for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
+                    for nearest in [
+                        _nearest_station(
+                            municipality_lat, municipality_lon, positioned_station_values
+                        )
+                    ]
                     if nearest is not None
                     for _, nearest_value in [nearest]
                 ]
@@ -381,7 +407,11 @@ def main() -> None:
                 station_assignments = [
                     (region_ars, station_id)
                     for _, region_ars, municipality_lat, municipality_lon in municipality_coords
-                    for nearest in [_nearest_station(municipality_lat, municipality_lon, positioned_station_values)]
+                    for nearest in [
+                        _nearest_station(
+                            municipality_lat, municipality_lon, positioned_station_values
+                        )
+                    ]
                     if nearest is not None
                     for station_id, _ in [nearest]
                 ]
@@ -408,7 +438,9 @@ def main() -> None:
                 )
 
                 raw_values = [raw for _, raw in values]
-                normalized_values = normalize(raw_values, "lower_is_better", mode="robust_percentile")
+                normalized_values = normalize(
+                    raw_values, "lower_is_better", mode="robust_percentile"
+                )
                 _batch_write_indicator_values(
                     session,
                     indicator_id=indicator.id,

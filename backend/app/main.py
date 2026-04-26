@@ -1,11 +1,9 @@
 import logging
 
-from app.api.routes import health
-from app.api.routes import compare, metadata, recommendations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import regions
+from app.api.routes import compare, health, metadata, recommendations, regions
 from app.core.config import settings
 from app.core.db import SchemaDriftError, assert_schema_is_current
 from app.core.logging import configure_logging, request_logging_middleware
@@ -33,9 +31,7 @@ def startup() -> None:
     try:
         assert_schema_is_current()
     except SchemaDriftError:
-        logger.exception(
-            "Startup aborted because the database schema is outdated."
-        )
+        logger.exception("Startup aborted because the database schema is outdated.")
         raise
     logger.info("Schema checks passed.")
 

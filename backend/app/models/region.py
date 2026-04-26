@@ -1,5 +1,3 @@
-from typing import Optional
-
 from sqlmodel import Field, SQLModel
 
 
@@ -17,8 +15,8 @@ class Region(SQLModel, table=True):
     district_name: str | None = None
     population: int | None = None
     area_km2: float | None = None
-    centroid_lat: Optional[float] = None
-    centroid_lon: Optional[float] = None
+    centroid_lat: float | None = None
+    centroid_lon: float | None = None
     wikidata_id: str | None = None
     wikidata_url: str | None = None
     wikipedia_url: str | None = None

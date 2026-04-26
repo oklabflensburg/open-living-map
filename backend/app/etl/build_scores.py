@@ -35,10 +35,7 @@ def _category_score(
     if not weights:
         return round(sum(value for _, value in entries) / len(entries), 2)
 
-    weighted_entries = [
-        (value, weights.get(indicator.key, 1.0))
-        for indicator, value in entries
-    ]
+    weighted_entries = [(value, weights.get(indicator.key, 1.0)) for indicator, value in entries]
     denominator = sum(weight for _, weight in weighted_entries)
     if denominator <= 0:
         return round(sum(value for value, _ in weighted_entries) / len(weighted_entries), 2)
@@ -55,14 +52,13 @@ def main() -> None:
             regions = list(session.exec(select(Region)))
             indicators = {row.id: row for row in session.exec(select(IndicatorDefinition))}
 
-        # Count total indicators per category for coverage calculation
+            # Count total indicators per category for coverage calculation
             indicators_by_category: dict[str, list[IndicatorDefinition]] = defaultdict(list)
             for indicator in indicators.values():
                 indicators_by_category[indicator.category].append(indicator)
 
             total_indicators_per_category = {
-                category: len(indicators_by_category[category])
-                for category in CATEGORIES
+                category: len(indicators_by_category[category]) for category in CATEGORIES
             }
 
             for region in regions:
@@ -94,7 +90,9 @@ def main() -> None:
                         coverage = len(entries) / total_indicators
                     else:
                         coverage = 0.0
-                    category_coverage[category] = round(coverage, 3)  # Keep 3 decimal places for precision
+                    category_coverage[category] = round(
+                        coverage, 3
+                    )  # Keep 3 decimal places for precision
 
                     # Calculate score only if we have data (coverage > 0)
                     if entries:
@@ -105,14 +103,17 @@ def main() -> None:
 
                 # Calculate total score with a coverage penalty so sparse proxy data
                 # cannot rank like a fully covered region.
-                categories_with_data = [cat for cat in CATEGORIES if category_scores[cat] is not None]
+                categories_with_data = [
+                    cat for cat in CATEGORIES if category_scores[cat] is not None
+                ]
                 if categories_with_data:
                     total = round(
                         sum(
                             (category_scores[cat] or 0.0) * category_coverage[cat]
                             for cat in CATEGORIES
-                        ) / len(CATEGORIES),
-                        2
+                        )
+                        / len(CATEGORIES),
+                        2,
                     )
                 else:
                     total = 0.0

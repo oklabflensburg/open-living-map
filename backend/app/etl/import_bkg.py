@@ -1,5 +1,5 @@
-import logging
 import json
+import logging
 import re
 import time
 from collections.abc import Iterable
@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 
 from app.core.ars import normalize_ars, slugify_region_name
 from app.core.config import settings
-from app.core.db import engine, check_schema_drift
+from app.core.db import check_schema_drift, engine
 from app.core.logging import configure_logging
 from app.etl.common import tracked_etl_run
 from app.models.indicator import RegionIndicatorValue
@@ -33,9 +33,7 @@ XREPOSITORY_AGS_API_URL = (
     "urn%3Ade%3Abund%3Adestatis%3Abevoelkerungsstatistik%3Aschluessel%3Aags"
 )
 XREPOSITORY_KREIS_URN = "urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis_2025-03-31"
-XREPOSITORY_KREIS_DETAILS_URL = (
-    "https://www.xrepository.de/details/urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis_2025-03-31"
-)
+XREPOSITORY_KREIS_DETAILS_URL = "https://www.xrepository.de/details/urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis_2025-03-31"
 XREPOSITORY_KREIS_JSON_URL = (
     "https://www.xrepository.de/api/xrepository/"
     "urn:de:bund:destatis:bevoelkerungsstatistik:schluessel:kreis_2025-03-31/"
@@ -68,7 +66,7 @@ STATE_NAMES = {
 
 def _chunked[T](items: list[T], size: int) -> Iterable[list[T]]:
     for start_idx in range(0, len(items), size):
-        yield items[start_idx: start_idx + size]
+        yield items[start_idx : start_idx + size]
 
 
 def _normalize_property_key(raw: str) -> str:
@@ -239,8 +237,7 @@ def fetch_xrepository_ags_metadata() -> dict[str, str] | None:
         response.raise_for_status()
         root = ElementTree.fromstring(response.text)
     except Exception as exc:
-        logger.warning(
-            "XRepository AGS-Metadatenabruf fehlgeschlagen: %s", exc)
+        logger.warning("XRepository AGS-Metadatenabruf fehlgeschlagen: %s", exc)
         return None
 
     versions = [
@@ -249,8 +246,7 @@ def fetch_xrepository_ags_metadata() -> dict[str, str] | None:
         if (elem.text or "").strip()
     ]
     latest_version_urn = versions[-1] if versions else XREPOSITORY_AGS_URN
-    latest_version = latest_version_urn.rsplit(
-        "_", 1)[-1] if "_" in latest_version_urn else ""
+    latest_version = latest_version_urn.rsplit("_", 1)[-1] if "_" in latest_version_urn else ""
 
     return {
         "urn": XREPOSITORY_AGS_URN,
@@ -299,16 +295,15 @@ def _parse_genericode_rows(xml_text: str) -> dict[str, str]:
     for row in root.findall(".//{*}Row"):
         values: dict[str, str] = {}
         for value in row.findall(".//{*}Value"):
-            column_ref = value.attrib.get(
-                "ColumnRef") or value.attrib.get("columnRef")
+            column_ref = value.attrib.get("ColumnRef") or value.attrib.get("columnRef")
             if not column_ref:
                 continue
             value_text_candidates = _value_texts(value)
             simple_value = next(
-                (candidate for candidate in value_text_candidates if candidate), None)
+                (candidate for candidate in value_text_candidates if candidate), None
+            )
             if simple_value:
-                values[column_names.get(
-                    column_ref, column_ref).upper()] = simple_value
+                values[column_names.get(column_ref, column_ref).upper()] = simple_value
         if not values:
             continue
         code = next(
@@ -326,8 +321,7 @@ def _parse_genericode_rows(xml_text: str) -> dict[str, str]:
             None,
         )
         if not code:
-            code = next((value for value in values.values()
-                        if re.fullmatch(r"\d{5}", value)), None)
+            code = next((value for value in values.values() if re.fullmatch(r"\d{5}", value)), None)
         name = next(
             (
                 values[key]
@@ -365,11 +359,14 @@ def fetch_xrepository_kreis_mapping() -> dict[str, str]:
         response.raise_for_status()
         payload = response.json()
         mapping: dict[str, str] = {}
-        if isinstance(payload, dict) and isinstance(payload.get("daten"), list) and isinstance(payload.get("spalten"), list):
+        if (
+            isinstance(payload, dict)
+            and isinstance(payload.get("daten"), list)
+            and isinstance(payload.get("spalten"), list)
+        ):
             columns = [
                 (
-                    str(column.get("spaltennameTechnisch")
-                        or column.get("spaltennameLang") or "")
+                    str(column.get("spaltennameTechnisch") or column.get("spaltennameLang") or "")
                     .strip()
                     .upper()
                 )
@@ -377,13 +374,15 @@ def fetch_xrepository_kreis_mapping() -> dict[str, str]:
                 if isinstance(column, dict)
             ]
             code_index = next(
-                (index for index, name in enumerate(
-                    columns) if name == "SCHLUESSEL"),
+                (index for index, name in enumerate(columns) if name == "SCHLUESSEL"),
                 None,
             )
             name_index = next(
-                (index for index, name in enumerate(columns)
-                 if name in {"BEZEICHNUNG", "NAME", "GEN"}),
+                (
+                    index
+                    for index, name in enumerate(columns)
+                    if name in {"BEZEICHNUNG", "NAME", "GEN"}
+                ),
                 None,
             )
             if code_index is not None and name_index is not None:
@@ -392,10 +391,8 @@ def fetch_xrepository_kreis_mapping() -> dict[str, str]:
                         continue
                     if max(code_index, name_index) >= len(row):
                         continue
-                    code = str(row[code_index]).strip(
-                    ) if row[code_index] is not None else ""
-                    name = str(row[name_index]).strip(
-                    ) if row[name_index] is not None else ""
+                    code = str(row[code_index]).strip() if row[code_index] is not None else ""
+                    name = str(row[name_index]).strip() if row[name_index] is not None else ""
                     if re.fullmatch(r"\d{5}", code) and name:
                         mapping[code] = name
         elif isinstance(payload, list):
@@ -406,7 +403,8 @@ def fetch_xrepository_kreis_mapping() -> dict[str, str]:
                     (
                         str(row.get(key)).strip()
                         for key in ["SCHLUESSEL", "schluessel", "code", "CODE", "id", "ID"]
-                        if row.get(key) is not None and re.fullmatch(r"\d{5}", str(row.get(key)).strip())
+                        if row.get(key) is not None
+                        and re.fullmatch(r"\d{5}", str(row.get(key)).strip())
                     ),
                     None,
                 )
@@ -421,19 +419,18 @@ def fetch_xrepository_kreis_mapping() -> dict[str, str]:
                 if code and name:
                     mapping[code] = name
         if mapping:
-            logger.info(
-                "Kreis-Referenz aus XRepository geladen (%s Eintraege)", len(mapping))
+            logger.info("Kreis-Referenz aus XRepository geladen (%s Eintraege)", len(mapping))
             return mapping
-        logger.warning(
-            "XRepository Kreisreferenz lieferte keine parsebaren JSON-Eintraege.")
+        logger.warning("XRepository Kreisreferenz lieferte keine parsebaren JSON-Eintraege.")
         return {}
     except Exception as exc:
-        logger.warning(
-            "XRepository Kreisreferenzabruf fehlgeschlagen: %s", exc)
+        logger.warning("XRepository Kreisreferenzabruf fehlgeschlagen: %s", exc)
         return {}
 
 
-def apply_xrepository_district_names(rows: list[dict[str, object]], district_mapping: dict[str, str]) -> None:
+def apply_xrepository_district_names(
+    rows: list[dict[str, object]], district_mapping: dict[str, str]
+) -> None:
     if not district_mapping:
         return
     for row in rows:
@@ -470,20 +467,21 @@ def assign_unique_slugs(rows: list[dict[str, object]]) -> None:
 def upsert_regions(session: Session, rows: Iterable[dict[str, object]]) -> None:
     count = 0
     for row in rows:
-        region_row = {key: value for key,
-                      value in row.items() if not key.startswith("_")}
+        region_row = {key: value for key, value in row.items() if not key.startswith("_")}
         ars_value = normalize_ars(str(region_row["ars"]))
         region_row["ars"] = ars_value
-        region_row["slug"] = str(row.get("_slug") or slugify_region_name(
-            str(region_row["name"]),
-            str(region_row.get("district_name", "")),
-            str(region_row.get("state_name", "")),
-            str(region_row.get("bem", "")),
-            str(row.get("_district_type", "")),
-        ))
+        region_row["slug"] = str(
+            row.get("_slug")
+            or slugify_region_name(
+                str(region_row["name"]),
+                str(region_row.get("district_name", "")),
+                str(region_row.get("state_name", "")),
+                str(region_row.get("bem", "")),
+                str(row.get("_district_type", "")),
+            )
+        )
 
-        existing = session.exec(select(Region).where(
-            Region.ars == ars_value)).first()
+        existing = session.exec(select(Region).where(Region.ars == ars_value)).first()
         if existing:
             for key, value in region_row.items():
                 setattr(existing, key, value)
@@ -608,23 +606,19 @@ def refresh_state_boundaries(session: Session) -> None:
 
 def prune_non_target_regions(session: Session, target_ags: set[str]) -> int:
     regions = list(session.exec(select(Region.id, Region.ars)))
-    stale_ids = [region_id for region_id,
-                 ars in regions if ars not in target_ags]
+    stale_ids = [region_id for region_id, ars in regions if ars not in target_ags]
     if not stale_ids:
         return 0
 
-    session.exec(delete(RegionIndicatorValue).where(
-        RegionIndicatorValue.region_id.in_(stale_ids)))
-    session.exec(delete(RegionScoreSnapshot).where(
-        RegionScoreSnapshot.region_id.in_(stale_ids)))
+    session.exec(delete(RegionIndicatorValue).where(RegionIndicatorValue.region_id.in_(stale_ids)))
+    session.exec(delete(RegionScoreSnapshot).where(RegionScoreSnapshot.region_id.in_(stale_ids)))
     session.exec(delete(Region).where(Region.id.in_(stale_ids)))
     session.commit()
     return len(stale_ids)
 
 
 def _get_capabilities() -> str:
-    params = {"service": "WFS",
-              "request": "GetCapabilities", "version": WFS_VERSION}
+    params = {"service": "WFS", "request": "GetCapabilities", "version": WFS_VERSION}
     with httpx.Client(timeout=30, follow_redirects=True) as client:
         response = client.get(BKG_WFS_URL, params=params)
         response.raise_for_status()
@@ -665,13 +659,13 @@ def _fetch_features_all(type_name: str, count: int = WFS_PAGE_SIZE) -> list[dict
     start_index = 0
     out: list[dict[str, Any]] = []
     while True:
-        page = _fetch_features_page(
-            type_name, start_index=start_index, count=count)
+        page = _fetch_features_page(type_name, start_index=start_index, count=count)
         if not page:
             break
         out.extend(page)
-        logger.info("WFS %s: %s Features geladen (startIndex=%s)",
-                    type_name, len(page), start_index)
+        logger.info(
+            "WFS %s: %s Features geladen (startIndex=%s)", type_name, len(page), start_index
+        )
         if len(page) < count:
             break
         start_index += count
@@ -705,7 +699,8 @@ def _build_wikidata_url(wikidata_id: str | None) -> str | None:
 def _build_sparql_query(article_titles: list[str]) -> str:
     wikipedia_project_url = f"https://{settings.wikipedia_language}.wikipedia.org/"
     title_values = " ".join(
-        f"{json.dumps(title)}@{settings.wikipedia_language}" for title in article_titles)
+        f"{json.dumps(title)}@{settings.wikipedia_language}" for title in article_titles
+    )
     return f"""
     PREFIX schema: <http://schema.org/>
 
@@ -743,8 +738,9 @@ def _fetch_wikidata_pages(title_to_ags: dict[str, str]) -> dict[str, dict[str, s
                     break
 
                 retry_after = response.headers.get("Retry-After")
-                delay_seconds = float(
-                    retry_after) if retry_after else WIKIDATA_RETRY_DELAY_SECONDS * attempt
+                delay_seconds = (
+                    float(retry_after) if retry_after else WIKIDATA_RETRY_DELAY_SECONDS * attempt
+                )
                 logger.warning(
                     "Wikidata transient error %s for batch of %s titles, retry %s/%s after %.1fs",
                     response.status_code,
@@ -756,7 +752,9 @@ def _fetch_wikidata_pages(title_to_ags: dict[str, str]) -> dict[str, dict[str, s
                 time.sleep(delay_seconds)
             else:
                 logger.warning(
-                    "Wikidata batch skipped after repeated transient failures (%s titles)", len(title_batch))
+                    "Wikidata batch skipped after repeated transient failures (%s titles)",
+                    len(title_batch),
+                )
                 continue
 
             payload = response.json()
@@ -775,8 +773,7 @@ def _fetch_wikidata_pages(title_to_ags: dict[str, str]) -> dict[str, dict[str, s
                     "wikidata_url": _build_wikidata_url(wikidata_id),
                     "wikipedia_url": article_url,
                 }
-            logger.info(
-                "Wikidata/Wikipedia-Enrichment geladen fuer %s Titel", len(title_batch))
+            logger.info("Wikidata/Wikipedia-Enrichment geladen fuer %s Titel", len(title_batch))
 
     return result
 
@@ -784,15 +781,14 @@ def _fetch_wikidata_pages(title_to_ags: dict[str, str]) -> dict[str, dict[str, s
 def enrich_rows_with_wikidata(rows: list[dict[str, object]]) -> None:
     links_by_ags: dict[str, dict[str, str | None]] = {}
     try:
-        initial_title_to_ags = {_wikipedia_title_candidates(
-            row)[0]: str(row["ars"]) for row in rows}
+        initial_title_to_ags = {
+            _wikipedia_title_candidates(row)[0]: str(row["ars"]) for row in rows
+        }
         links_by_ags.update(_fetch_wikidata_pages(initial_title_to_ags))
     except Exception as exc:
-        logger.warning(
-            "Wikidata-Enrichment fuer Primartitel fehlgeschlagen: %s", exc)
+        logger.warning("Wikidata-Enrichment fuer Primartitel fehlgeschlagen: %s", exc)
 
-    unresolved_rows = [row for row in rows if str(
-        row["ars"]) not in links_by_ags]
+    unresolved_rows = [row for row in rows if str(row["ars"]) not in links_by_ags]
     if unresolved_rows:
         try:
             fallback_title_to_ags: dict[str, str] = {}
@@ -802,8 +798,7 @@ def enrich_rows_with_wikidata(rows: list[dict[str, object]]) -> None:
                     fallback_title_to_ags[candidate] = str(row["ars"])
             links_by_ags.update(_fetch_wikidata_pages(fallback_title_to_ags))
         except Exception as exc:
-            logger.warning(
-                "Wikidata-Enrichment fuer Fallbacktitel fehlgeschlagen: %s", exc)
+            logger.warning("Wikidata-Enrichment fuer Fallbacktitel fehlgeschlagen: %s", exc)
 
     for row in rows:
         link_data = links_by_ags.get(str(row["ars"]), {})
@@ -837,12 +832,13 @@ def _row_from_feature(feature: dict[str, Any]) -> dict[str, object] | None:
     if len(ags_str) != 8:
         return None
 
-    name = _get_prop(props, ["gen", "name", "gemeinde_name",
-                     "bezeichnung"]) or f"Gemeinde {ags_str}"
-    state_code = str(
-        _get_prop(props, ["sn_l", "state_code"]) or ags_str[:2]).zfill(2)
-    state_name = str(_get_prop(
-        props, ["gen_land", "land_name"]) or _state_name_from_code(state_code))
+    name = (
+        _get_prop(props, ["gen", "name", "gemeinde_name", "bezeichnung"]) or f"Gemeinde {ags_str}"
+    )
+    state_code = str(_get_prop(props, ["sn_l", "state_code"]) or ags_str[:2]).zfill(2)
+    state_name = str(
+        _get_prop(props, ["gen_land", "land_name"]) or _state_name_from_code(state_code)
+    )
     district_name = _district_name_from_props(props)
 
     ew = _safe_int(_get_prop(props, ["ewz", "ew", "einwohner"]))
@@ -887,10 +883,14 @@ def fetch_bkg_districts_from_postgis(session: Session) -> dict[str, dict[str, st
         """
     )
 
-    records = session.execute(
-        sql,
-        {"geometry_flavour": geometry_flavour},
-    ).mappings().all()
+    records = (
+        session.execute(
+            sql,
+            {"geometry_flavour": geometry_flavour},
+        )
+        .mappings()
+        .all()
+    )
 
     logger.info("Gefundene Kreise in BKG-Tabelle %s.%s: %s", schema, table, len(records))
     district_rows: dict[str, dict[str, str]] = {}
@@ -900,8 +900,12 @@ def fetch_bkg_districts_from_postgis(session: Session) -> dict[str, dict[str, st
         if len(district_code) != 5:
             continue
         district_rows[district_code] = {
-            "district_name": str(record["district_name"]).strip() if record["district_name"] else "",
-            "district_type": str(record["district_type"]).strip() if record["district_type"] else "",
+            "district_name": str(record["district_name"]).strip()
+            if record["district_name"]
+            else "",
+            "district_type": str(record["district_type"]).strip()
+            if record["district_type"]
+            else "",
             "state_code": str(record["state_code"]).zfill(2) if record["state_code"] else "",
         }
     return district_rows
@@ -912,25 +916,36 @@ def fetch_bkg_regions_from_postgis(session: Session) -> list[dict[str, object]]:
     geometry_column = _sql_identifier(settings.bkg_geometry_column)
     available_columns = _column_names(session, schema, table)
     geometry_flavour = _resolve_geometry_flavour(
-        session, schema, table, settings.bkg_geometry_flavour)
+        session, schema, table, settings.bkg_geometry_flavour
+    )
     population_column = next(
-        (column for column in ["ewz", "ew", "einwohner",
-         "population"] if column in available_columns),
+        (
+            column
+            for column in ["ewz", "ew", "einwohner", "population"]
+            if column in available_columns
+        ),
         None,
     )
     area_column = next(
-        (column for column in ["kfl", "flaeche", "shape_area",
-         "area_km2"] if column in available_columns),
+        (
+            column
+            for column in ["kfl", "flaeche", "shape_area", "area_km2"]
+            if column in available_columns
+        ),
         None,
     )
     district_column = _district_column_name(available_columns)
-    population_expr = f"{population_column} AS population" if population_column else "NULL::bigint AS population"
+    population_expr = (
+        f"{population_column} AS population" if population_column else "NULL::bigint AS population"
+    )
     area_expr = (
         f"{area_column} AS area_km2"
         if area_column
         else f"ROUND(CAST(ST_Area({geometry_column}::geography) / 1000000.0 AS numeric), 2) AS area_km2"
     )
-    district_expr = f"{district_column} AS district_name" if district_column else "NULL::text AS district_name"
+    district_expr = (
+        f"{district_column} AS district_name" if district_column else "NULL::text AS district_name"
+    )
     sql = sa_text(
         f"""
         SELECT
@@ -951,10 +966,14 @@ def fetch_bkg_regions_from_postgis(session: Session) -> list[dict[str, object]]:
         ORDER BY ags
         """
     )
-    records = session.execute(
-        sql,
-        {"geometry_flavour": geometry_flavour},
-    ).mappings().all()
+    records = (
+        session.execute(
+            sql,
+            {"geometry_flavour": geometry_flavour},
+        )
+        .mappings()
+        .all()
+    )
     district_rows = fetch_bkg_districts_from_postgis(session)
     rows: list[dict[str, object]] = []
     for record in records:
@@ -1043,14 +1062,16 @@ def fetch_bkg_regions() -> list[dict[str, object]]:
                 apply_xrepository_district_names(rows, district_mapping)
                 assign_unique_slugs(rows)
                 logger.info(
-                    "BKG WFS Gemeinde-Import erfolgreich mit Layer %s (%s Gemeinden)", type_name, len(rows))
+                    "BKG WFS Gemeinde-Import erfolgreich mit Layer %s (%s Gemeinden)",
+                    type_name,
+                    len(rows),
+                )
                 return rows
         except Exception as exc:
             errors.append(f"{type_name}: {exc}")
 
     if errors:
-        logger.warning(
-            "BKG WFS Layer-Versuche fehlgeschlagen: %s", " | ".join(errors))
+        logger.warning("BKG WFS Layer-Versuche fehlgeschlagen: %s", " | ".join(errors))
     return []
 
 
@@ -1079,7 +1100,8 @@ def main() -> None:
         rows = fetch_bkg_regions()
         if not rows:
             logger.error(
-                "BKG-WFS Gemeindeimport fehlgeschlagen. Keine Demo-Daten mehr als Fallback.")
+                "BKG-WFS Gemeindeimport fehlgeschlagen. Keine Demo-Daten mehr als Fallback."
+            )
             return
         enrich_rows_with_wikidata(rows)
 

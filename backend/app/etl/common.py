@@ -8,8 +8,8 @@ from typing import Any
 
 import httpx
 import pandas as pd
-from sqlmodel import Session, select
 from sqlalchemy import delete
+from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.db import SchemaDriftError, assert_schema_is_current, engine
@@ -142,7 +142,9 @@ def get_or_create_indicator(
     source_url: str,
     methodology: str,
 ) -> IndicatorDefinition:
-    existing = session.exec(select(IndicatorDefinition).where(IndicatorDefinition.key == key)).first()
+    existing = session.exec(
+        select(IndicatorDefinition).where(IndicatorDefinition.key == key)
+    ).first()
     if existing:
         existing.name = name
         existing.category = category

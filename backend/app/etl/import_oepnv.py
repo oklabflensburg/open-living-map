@@ -1,9 +1,9 @@
-import logging
-import io
 import csv
-import zipfile
-import time
+import io
+import logging
 import os
+import time
+import zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -146,7 +146,9 @@ def _open_gtfs_member(zf: zipfile.ZipFile, filename: str):
     return None
 
 
-def _gtfs_headers_and_rows(zf: zipfile.ZipFile, filename: str) -> tuple[list[str], io.TextIOWrapper] | None:
+def _gtfs_headers_and_rows(
+    zf: zipfile.ZipFile, filename: str
+) -> tuple[list[str], io.TextIOWrapper] | None:
     handle = _open_gtfs_member(zf, filename)
     if handle is None:
         return None
@@ -211,7 +213,11 @@ def _import_gtfs_to_postgres(gtfs_zip: Path, schema_name: str) -> None:
     with psycopg.connect(_psycopg_conn_string()) as conn:
         with conn.cursor() as cur:
             cur.execute("SET lock_timeout = '2s'")
-            cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(import_schema_name)))
+            cur.execute(
+                sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                    sql.Identifier(import_schema_name)
+                )
+            )
             cur.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(import_schema_name)))
         conn.commit()
 
@@ -300,7 +306,9 @@ def _municipality_boundaries_ready() -> bool:
         if not table_exists:
             return False
 
-        row_count = session.execute(text("SELECT COUNT(*) FROM geo.municipality_boundary")).scalar() or 0
+        row_count = (
+            session.execute(text("SELECT COUNT(*) FROM geo.municipality_boundary")).scalar() or 0
+        )
     return int(row_count) > 0
 
 
@@ -464,9 +472,10 @@ def _prepare_staging() -> str:
                 """
             )
         )
-        municipality_signature = session.execute(
-            text(
-                """
+        municipality_signature = (
+            session.execute(
+                text(
+                    """
                 SELECT md5(
                     COALESCE(
                         string_agg(
@@ -482,8 +491,10 @@ def _prepare_staging() -> str:
                 FROM region
                 WHERE level = 'gemeinde'
                 """
-            )
-        ).scalar() or ""
+                )
+            ).scalar()
+            or ""
+        )
         session.commit()
     return str(municipality_signature)
 
@@ -515,7 +526,10 @@ def _should_import_gtfs(feed_key: str, gtfs_zip: Path) -> bool:
     if registry_row is None:
         return True
     schema_name, source_path_db, file_size_db, modified_at_db = registry_row
-    if not all(_schema_has_table(schema_name, table_name) for table_name in ["stops", "trips", "stop_times"]):
+    if not all(
+        _schema_has_table(schema_name, table_name)
+        for table_name in ["stops", "trips", "stop_times"]
+    ):
         return True
 
     source_path, file_size, modified_at = _gtfs_file_signature(gtfs_zip)
@@ -599,7 +613,9 @@ def _should_rebuild_staging(feed_key: str, municipality_signature: str) -> bool:
     return stored_signature != municipality_signature
 
 
-def _store_stage_registry(feed_key: str, municipality_signature: str, active_stage_key: str) -> None:
+def _store_stage_registry(
+    feed_key: str, municipality_signature: str, active_stage_key: str
+) -> None:
     with with_session() as session:
         session.execute(
             text(
@@ -625,7 +641,9 @@ def _create_feed_indexes(schema_name: str) -> None:
     with with_session() as session:
         if _schema_has_table(schema_name, "stops"):
             session.exec(
-                text(f'CREATE INDEX IF NOT EXISTS {schema_name}_stops_stop_id_idx ON "{schema_name}".stops (stop_id);')
+                text(
+                    f'CREATE INDEX IF NOT EXISTS {schema_name}_stops_stop_id_idx ON "{schema_name}".stops (stop_id);'
+                )
             )
         if _schema_has_table(schema_name, "stop_times"):
             session.exec(
@@ -640,7 +658,9 @@ def _create_feed_indexes(schema_name: str) -> None:
             )
         if _schema_has_table(schema_name, "trips"):
             session.exec(
-                text(f'CREATE INDEX IF NOT EXISTS {schema_name}_trips_trip_id_idx ON "{schema_name}".trips (trip_id);')
+                text(
+                    f'CREATE INDEX IF NOT EXISTS {schema_name}_trips_trip_id_idx ON "{schema_name}".trips (trip_id);'
+                )
             )
             session.exec(
                 text(
@@ -718,14 +738,18 @@ def _load_feed_into_staging(stage_key: str, schema_name: str) -> None:
             {"stage_key": stage_key},
         )
 
-        if not _schema_has_table(schema_name, "stop_times") or not _schema_has_table(schema_name, "trips"):
+        if not _schema_has_table(schema_name, "stop_times") or not _schema_has_table(
+            schema_name, "trips"
+        ):
             session.commit()
             return
 
         calendar_join = ""
         calendar_weight_expr = "1.0"
         if _schema_has_table(schema_name, "calendar"):
-            calendar_join = f"LEFT JOIN {schema_name}.calendar c ON c.service_id::text = t.service_id::text"
+            calendar_join = (
+                f"LEFT JOIN {schema_name}.calendar c ON c.service_id::text = t.service_id::text"
+            )
             calendar_weight_expr = (
                 "GREATEST(("
                 "COALESCE(NULLIF(c.monday::text, '')::int, 0) + "
@@ -835,7 +859,9 @@ def _load_feed_into_staging(stage_key: str, schema_name: str) -> None:
         session.commit()
 
 
-def _fetch_metric_values(sql: str, params: dict[str, object] | None = None) -> list[tuple[int, float]]:
+def _fetch_metric_values(
+    sql: str, params: dict[str, object] | None = None
+) -> list[tuple[int, float]]:
     with with_session() as session:
         statement = text(sql)
         if params and "active_stage_keys" in params:
@@ -851,7 +877,12 @@ def _fetch_metric_values(sql: str, params: dict[str, object] | None = None) -> l
 
 def _compute_metrics(
     active_stage_keys: list[str],
-) -> tuple[list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]], list[tuple[int, float]]]:
+) -> tuple[
+    list[tuple[int, float]],
+    list[tuple[int, float]],
+    list[tuple[int, float]],
+    list[tuple[int, float]],
+]:
     params = {"active_stage_keys": active_stage_keys}
     stop_density_values = _fetch_metric_values(
         """
@@ -977,14 +1008,16 @@ def _write_indicator(
             source_url=SOURCE_URL,
             methodology=methodology,
         )
-        clear_indicator_values(session, indicator_id=indicator.id, period=settings.default_score_period)
+        clear_indicator_values(
+            session, indicator_id=indicator.id, period=settings.default_score_period
+        )
 
         if not values:
             return
 
         raw_values = [raw for _, raw in values]
         normalized_values = normalize(raw_values, direction, mode=normalization_mode)
-        for (region_id, raw), norm in zip(values, normalized_values):
+        for (region_id, raw), norm in zip(values, normalized_values, strict=True):
             quality_flag = "ok" if raw > 0 else "low_coverage"
             upsert_region_indicator_value(
                 session,
@@ -1004,7 +1037,9 @@ def main() -> None:
         sources=[{"source_name": "OpenData ÖPNV", "source_url": SOURCE_URL}],
     ) as run:
         if not _acquire_import_lock():
-            logger.warning("OEPNV-Import bereits aktiv. Neuer Lauf wird beendet statt auf DB-Locks zu warten.")
+            logger.warning(
+                "OEPNV-Import bereits aktiv. Neuer Lauf wird beendet statt auf DB-Locks zu warten."
+            )
             return
 
         urls = _parse_gtfs_urls()
@@ -1035,20 +1070,31 @@ def main() -> None:
                         active_schema_name = import_schema_name
                         raw_imported = True
                     else:
-                        logger.info("GTFS-Rohimport uebersprungen, Feed unveraendert: %s", gtfs_path)
+                        logger.info(
+                            "GTFS-Rohimport uebersprungen, Feed unveraendert: %s", gtfs_path
+                        )
 
                     if raw_imported or _should_rebuild_staging(feed_key, municipality_signature):
                         active_stage_key = f"{feed_key}:{int(time.time())}"
-                        logger.info("Starte GTFS-Staging fuer %s mit stage key %s", feed_key, active_stage_key)
+                        logger.info(
+                            "Starte GTFS-Staging fuer %s mit stage key %s",
+                            feed_key,
+                            active_stage_key,
+                        )
                         _load_feed_into_staging(active_stage_key, active_schema_name)
                         _store_stage_registry(feed_key, municipality_signature, active_stage_key)
                     else:
-                        logger.info("GTFS-Staging uebersprungen, Feed und Gemeinden unveraendert: %s", feed_key)
+                        logger.info(
+                            "GTFS-Staging uebersprungen, Feed und Gemeinden unveraendert: %s",
+                            feed_key,
+                        )
                         stage_registry = _get_stage_registry(feed_key)
                         if stage_registry and stage_registry[1]:
                             active_stage_key = stage_registry[1]
                         else:
-                            raise RuntimeError(f"Kein aktiver GTFS-Stage-Key fuer {feed_key} vorhanden")
+                            raise RuntimeError(
+                                f"Kein aktiver GTFS-Stage-Key fuer {feed_key} vorhanden"
+                            )
                     active_stage_keys.append(active_stage_key)
                     loaded_feeds += 1
                 except Exception as exc:
@@ -1059,7 +1105,9 @@ def main() -> None:
                 logger.warning("Kein GTFS-Feed erfolgreich verarbeitet. Kein Write.")
                 return
 
-            stop_density_values, departures_values, departures_total_values, regularity_values = _compute_metrics(active_stage_keys)
+            stop_density_values, departures_values, departures_total_values, regularity_values = (
+                _compute_metrics(active_stage_keys)
+            )
 
             _write_indicator(
                 key="oepnv_stop_density",
@@ -1120,7 +1168,12 @@ def main() -> None:
                 values=regularity_values,
             )
 
-            run.set_rows_written(len(stop_density_values) + len(departures_values) + len(departures_total_values) + len(regularity_values))
+            run.set_rows_written(
+                len(stop_density_values)
+                + len(departures_values)
+                + len(departures_total_values)
+                + len(regularity_values)
+            )
             logger.info(
                 "OEPNV-Import abgeschlossen (Feeds=%s, Stops=%s Regionen, Abfahrtsdichte=%s Regionen, Angebotsmasse=%s Regionen, Regelmaessigkeit=%s Regionen)",
                 loaded_feeds,

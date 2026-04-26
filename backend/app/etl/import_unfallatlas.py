@@ -1,5 +1,4 @@
 import io
-import json
 import logging
 import zipfile
 from pathlib import Path
@@ -107,10 +106,22 @@ def _to_region_ars(df: pd.DataFrame) -> pd.Series:
         if col not in df.columns:
             raise ValueError(f"Pflichtspalte {col} fehlt in Unfallatlas CSV")
 
-    land = pd.to_numeric(df["ULAND"], errors="coerce").fillna(0).astype(int).astype(str).str.zfill(2)
-    reg = pd.to_numeric(df["UREGBEZ"], errors="coerce").fillna(0).astype(int).astype(str).str.zfill(1)
-    district = pd.to_numeric(df["UKREIS"], errors="coerce").fillna(0).astype(int).astype(str).str.zfill(2)
-    municipality = pd.to_numeric(df["UGEMEINDE"], errors="coerce").fillna(0).astype(int).astype(str).str.zfill(3)
+    land = (
+        pd.to_numeric(df["ULAND"], errors="coerce").fillna(0).astype(int).astype(str).str.zfill(2)
+    )
+    reg = (
+        pd.to_numeric(df["UREGBEZ"], errors="coerce").fillna(0).astype(int).astype(str).str.zfill(1)
+    )
+    district = (
+        pd.to_numeric(df["UKREIS"], errors="coerce").fillna(0).astype(int).astype(str).str.zfill(2)
+    )
+    municipality = (
+        pd.to_numeric(df["UGEMEINDE"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+        .astype(str)
+        .str.zfill(3)
+    )
     ars8 = land + reg + district + municipality
     kreisfreie_mask = municipality == "000"
     ars8 = ars8.where(~kreisfreie_mask, (land + reg + district + "000"))
@@ -199,7 +210,7 @@ def _write_accident_points(session, df: pd.DataFrame) -> None:
 
     rows: list[dict[str, object]] = []
     for row in df.itertuples(index=False):
-        region_ars = normalize_ars(str(getattr(row, "ars")))
+        region_ars = normalize_ars(str(row.ars))
         if not region_ars:
             continue
         lon = getattr(row, "XGCSWGS84", None)
@@ -211,10 +222,10 @@ def _write_accident_points(session, df: pd.DataFrame) -> None:
             continue
         rows.append(
             {
-                "accident_id": str(getattr(row, "UIDENTSTLAE")),
+                "accident_id": str(row.UIDENTSTLAE),
                 "region_ars": region_ars,
                 "category": category,
-                "year": int(getattr(row, "UJAHR")),
+                "year": int(row.UJAHR),
                 "lon": float(lon),
                 "lat": float(lat),
             }
@@ -282,7 +293,9 @@ def main() -> None:
                 rows.append((region.id, float(row["accidents_total"])))
 
             if not rows:
-                logger.warning("Unfallatlas-Daten konnten auf keine Region gemappt werden. Kein Write.")
+                logger.warning(
+                    "Unfallatlas-Daten konnten auf keine Region gemappt werden. Kein Write."
+                )
                 return
 
             _write_accident_points(session, df)
@@ -314,7 +327,7 @@ def main() -> None:
                 _bounded_normalized_score(value)
                 for value in normalize(raw_values, indicator.direction, mode="log")
             ]
-            for (region_id, raw), norm in zip(rows, normalized_values):
+            for (region_id, raw), norm in zip(rows, normalized_values, strict=True):
                 upsert_region_indicator_value(
                     session,
                     region_id=region_id,

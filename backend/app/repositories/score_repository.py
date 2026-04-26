@@ -29,7 +29,9 @@ class ScoreRepository:
         self.session = session
 
     def list_indicators(self) -> list[IndicatorDefinition]:
-        statement = select(IndicatorDefinition).order_by(IndicatorDefinition.category, IndicatorDefinition.key)
+        statement = select(IndicatorDefinition).order_by(
+            IndicatorDefinition.category, IndicatorDefinition.key
+        )
         return list(self.session.exec(statement))
 
     def list_snapshots(
@@ -52,7 +54,9 @@ class ScoreRepository:
             statement = statement.where(Region.state_code == state_code)
         return list(self.session.exec(statement).all())
 
-    def list_indicator_values(self, region_id: int) -> list[tuple[IndicatorDefinition, RegionIndicatorValue]]:
+    def list_indicator_values(
+        self, region_id: int
+    ) -> list[tuple[IndicatorDefinition, RegionIndicatorValue]]:
         statement = (
             select(IndicatorDefinition, RegionIndicatorValue)
             .join(RegionIndicatorValue, RegionIndicatorValue.indicator_id == IndicatorDefinition.id)
@@ -72,7 +76,11 @@ class ScoreRepository:
             .join(RegionIndicatorValue, RegionIndicatorValue.indicator_id == IndicatorDefinition.id)
             .where(RegionIndicatorValue.region_id.in_(region_ids))
             .where(RegionIndicatorValue.period == settings.default_score_period)
-            .order_by(RegionIndicatorValue.region_id, IndicatorDefinition.category, IndicatorDefinition.key)
+            .order_by(
+                RegionIndicatorValue.region_id,
+                IndicatorDefinition.category,
+                IndicatorDefinition.key,
+            )
         )
         grouped: dict[int, list[tuple[IndicatorDefinition, RegionIndicatorValue]]] = {
             region_id: [] for region_id in region_ids
@@ -122,7 +130,9 @@ class ScoreRepository:
             coverage_column = coverage_columns[category]
             weight_literal = literal(float(weight))
             coverage_weight = case((coverage_column > 0, coverage_column), else_=0.0)
-            weighted_numerator = weighted_numerator + (score_column * weight_literal * coverage_weight)
+            weighted_numerator = weighted_numerator + (
+                score_column * weight_literal * coverage_weight
+            )
             weighted_denominator = weighted_denominator + (weight_literal * coverage_weight)
             fallback_numerator = fallback_numerator + (score_column * weight_literal)
             fallback_denominator = fallback_denominator + weight_literal
@@ -144,7 +154,8 @@ class ScoreRepository:
             urbanity_score = case(
                 (population <= URBANITY_POPULATION_FLOOR, literal(0.0)),
                 (population >= URBANITY_POPULATION_CEILING, literal(100.0)),
-                else_=((func.ln(population) - literal(log_floor)) / literal(log_range)) * literal(100.0),
+                else_=((func.ln(population) - literal(log_floor)) / literal(log_range))
+                * literal(100.0),
             )
             profile_score = (
                 profile_score * literal(1.0 - URBANITY_BLEND_WEIGHT)
@@ -204,7 +215,9 @@ class ScoreRepository:
         return list(self.session.exec(statement).all())
 
     def list_amenity_aggregates(self, ars: str) -> list[tuple[str, int, float]]:
-        table_exists = self.session.execute(text("SELECT to_regclass('osm.region_amenity_agg') IS NOT NULL")).scalar()
+        table_exists = self.session.execute(
+            text("SELECT to_regclass('osm.region_amenity_agg') IS NOT NULL")
+        ).scalar()
         if not table_exists:
             return []
 

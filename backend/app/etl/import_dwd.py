@@ -2,7 +2,6 @@ import io
 import logging
 import re
 import zipfile
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -112,7 +111,7 @@ def _batch_write_indicator_values(
         )
     }
 
-    for (municipality_id, raw), normalized in zip(values, normalized_values):
+    for (municipality_id, raw), normalized in zip(values, normalized_values, strict=True):
         existing = existing_rows.get(municipality_id)
         if existing:
             existing.raw_value = round(raw, 4)
@@ -187,12 +186,21 @@ def _read_station_zip(zip_path: Path) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     if "MESS_DATUM" in df.columns:
-        df["MESS_DATUM"] = pd.to_datetime(df["MESS_DATUM"].astype(str), format="%Y%m%d", errors="coerce")
+        df["MESS_DATUM"] = pd.to_datetime(
+            df["MESS_DATUM"].astype(str), format="%Y%m%d", errors="coerce"
+        )
     return df
 
 
-def _station_metrics(df: pd.DataFrame, lookback_days: int = 365) -> tuple[float, float, float] | None:
-    if df.empty or "MESS_DATUM" not in df.columns or "TXK" not in df.columns or "RSK" not in df.columns:
+def _station_metrics(
+    df: pd.DataFrame, lookback_days: int = 365
+) -> tuple[float, float, float] | None:
+    if (
+        df.empty
+        or "MESS_DATUM" not in df.columns
+        or "TXK" not in df.columns
+        or "RSK" not in df.columns
+    ):
         return None
 
     cutoff = pd.Timestamp(datetime.now(UTC).date() - timedelta(days=lookback_days))
@@ -246,7 +254,11 @@ def main() -> None:
             municipalities = list(session.exec(select(Region).where(Region.level == "gemeinde")))
             municipality_by_id = {municipality.id: municipality for municipality in municipalities}
             municipality_coords = [
-                (municipality.id, float(municipality.centroid_lat), float(municipality.centroid_lon))
+                (
+                    municipality.id,
+                    float(municipality.centroid_lat),
+                    float(municipality.centroid_lon),
+                )
                 for municipality in municipalities
                 if municipality.centroid_lat is not None and municipality.centroid_lon is not None
             ]
@@ -278,13 +290,17 @@ def main() -> None:
                 station_metrics.append((station_id, station_name, lat, lon, metrics))
 
             if not station_metrics:
-                logger.warning("Keine verwertbaren DWD-Stationen mit Metriken gefunden. Kein Write.")
+                logger.warning(
+                    "Keine verwertbaren DWD-Stationen mit Metriken gefunden. Kein Write."
+                )
                 return
 
             per_municipality: dict[int, dict[str, list[float]]] = {}
             climate_station_assignments: list[dict[str, object]] = []
             for municipality_id, municipality_lat, municipality_lon in municipality_coords:
-                match = _nearest_station_metrics(municipality_lat, municipality_lon, station_metrics)
+                match = _nearest_station_metrics(
+                    municipality_lat, municipality_lon, station_metrics
+                )
                 if match is None:
                     continue
                 station_id, station_name, station_lat, station_lon, metrics = match
@@ -365,7 +381,9 @@ def main() -> None:
             session.commit()
             run.set_rows_written(len(per_municipality))
 
-        logger.info("DWD-Import abgeschlossen (%s Gemeinden mit DWD-Zuordnung)", len(per_municipality))
+        logger.info(
+            "DWD-Import abgeschlossen (%s Gemeinden mit DWD-Zuordnung)", len(per_municipality)
+        )
 
 
 if __name__ == "__main__":

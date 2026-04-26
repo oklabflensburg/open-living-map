@@ -7,7 +7,6 @@ Create Date: 2026-04-21 01:20:00
 
 from alembic import op
 
-
 revision = "20260421_0021"
 down_revision = "20260421_0020"
 branch_labels = None

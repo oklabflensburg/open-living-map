@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 
 from fastapi import Request, Response
 
-
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 
 

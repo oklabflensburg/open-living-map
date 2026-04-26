@@ -13,7 +13,6 @@ from sqlalchemy import inspect
 
 from app.core.ars import slugify_region_name
 
-
 # revision identifiers, used by Alembic.
 revision: str = "20260417_0005"
 down_revision: str | None = "20260417_0004"

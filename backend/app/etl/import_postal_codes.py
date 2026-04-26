@@ -17,14 +17,22 @@ def _source_tables_ready() -> bool:
         boundary_exists = connection.execute(
             text("SELECT to_regclass('geo.municipality_boundary') IS NOT NULL")
         ).scalar()
-        region_exists = connection.execute(text("SELECT to_regclass('region') IS NOT NULL")).scalar()
+        region_exists = connection.execute(
+            text("SELECT to_regclass('region') IS NOT NULL")
+        ).scalar()
         postal_area_stage_exists = connection.execute(
             text("SELECT to_regclass('postal.postal_area_stage') IS NOT NULL")
         ).scalar()
         postal_region_exists = connection.execute(
             text("SELECT to_regclass('postal.region_postal_code') IS NOT NULL")
         ).scalar()
-    return bool(polygon_exists and boundary_exists and region_exists and postal_area_stage_exists and postal_region_exists)
+    return bool(
+        polygon_exists
+        and boundary_exists
+        and region_exists
+        and postal_area_stage_exists
+        and postal_region_exists
+    )
 
 
 def rebuild_postal_area_stage() -> int:
@@ -218,8 +226,14 @@ def main() -> None:
     with tracked_etl_run(
         job_name="import_postal_codes",
         sources=[
-            {"source_name": "OpenStreetMap postal polygons", "source_url": "osm.planet_osm_polygon"},
-            {"source_name": "BKG municipality boundaries", "source_url": "geo.municipality_boundary"},
+            {
+                "source_name": "OpenStreetMap postal polygons",
+                "source_url": "osm.planet_osm_polygon",
+            },
+            {
+                "source_name": "BKG municipality boundaries",
+                "source_url": "geo.municipality_boundary",
+            },
         ],
     ) as run:
         staged = rebuild_postal_area_stage()

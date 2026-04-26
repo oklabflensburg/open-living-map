@@ -1,5 +1,5 @@
-import re
 import json
+import re
 from typing import Any
 
 from sqlalchemy import text
@@ -62,7 +62,9 @@ ACCIDENT_CATEGORY_LABELS = {
 }
 
 
-def _build_tag_match_condition(alias: str, mappings: list[tuple[str, str]]) -> tuple[str, dict[str, str]]:
+def _build_tag_match_condition(
+    alias: str, mappings: list[tuple[str, str]]
+) -> tuple[str, dict[str, str]]:
     clauses: list[str] = []
     params: dict[str, str] = {}
     for index, (osm_key, osm_value) in enumerate(mappings):
@@ -219,11 +221,11 @@ class RegionRepository:
         return [str(row[0]) for row in rows]
 
     def list_regions(
-        self, 
-        search_query: str | None = None, 
+        self,
+        search_query: str | None = None,
         state_code: str | None = None,
         limit: int = 100,
-        offset: int = 0
+        offset: int = 0,
     ) -> list[Region]:
         if search_query:
             ars_matches = self._search_region_ars(
@@ -247,8 +249,7 @@ class RegionRepository:
         return list(self.session.exec(statement))
 
     def get_by_ars(self, ars: str) -> Region | None:
-        statement = select(Region).where(
-            Region.ars.in_(lookup_candidates(ars)))
+        statement = select(Region).where(Region.ars.in_(lookup_candidates(ars)))
         region = self.session.exec(statement).first()
         if region:
             return region
@@ -288,9 +289,7 @@ class RegionRepository:
                 str(category),
                 {"updated_at": None, "sources": set()},
             )
-            if updated_at and (
-                bucket["updated_at"] is None or updated_at > bucket["updated_at"]
-            ):
+            if updated_at and (bucket["updated_at"] is None or updated_at > bucket["updated_at"]):
                 bucket["updated_at"] = updated_at
             if source_name:
                 bucket["sources"].add(str(source_name))
@@ -391,7 +390,7 @@ class RegionRepository:
             .distinct()
             .order_by(IndicatorDefinition.source_url)
         )
-        links = [row for row in self.session.exec(statement)]
+        links = list(self.session.exec(statement))
         for required in MANDATORY_SOURCE_LINKS:
             if required not in links:
                 links.append(required)
@@ -399,7 +398,8 @@ class RegionRepository:
 
     def list_amenity_aggregates(self, ars: str) -> list[tuple[str, int, float]]:
         table_exists = self.session.execute(
-            text("SELECT to_regclass('osm.region_amenity_agg') IS NOT NULL")).scalar()
+            text("SELECT to_regclass('osm.region_amenity_agg') IS NOT NULL")
+        ).scalar()
         if not table_exists:
             return []
 
@@ -478,7 +478,8 @@ class RegionRepository:
 
     def list_accident_stats(self, ars: str) -> list[tuple[str, int]]:
         table_exists = self.session.execute(
-            text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")).scalar()
+            text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")
+        ).scalar()
         if not table_exists:
             return []
         rows = self.session.execute(
@@ -493,7 +494,11 @@ class RegionRepository:
             {"ars": ars},
         ).all()
         counts = {str(row[0]): int(row[1]) for row in rows}
-        return [(category, counts[category]) for category in ACCIDENT_CATEGORY_ORDER if category in counts]
+        return [
+            (category, counts[category])
+            for category in ACCIDENT_CATEGORY_ORDER
+            if category in counts
+        ]
 
     def list_air_stations(
         self, ars: str
@@ -611,7 +616,8 @@ class RegionRepository:
 
     def get_accident_pois_geojson(self, ars: str, category: str) -> dict[str, Any]:
         table_exists = self.session.execute(
-            text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")).scalar()
+            text("SELECT to_regclass('traffic.accident_point') IS NOT NULL")
+        ).scalar()
         if not table_exists:
             return {"type": "FeatureCollection", "features": []}
 

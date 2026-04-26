@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 import httpx
 from sqlalchemy import delete
+from sqlmodel import select
 
 from app.core.ars import normalize_ars
 from app.core.config import settings
@@ -23,9 +24,8 @@ from app.etl.common import (
     upsert_region_indicator_value,
     with_session,
 )
-from app.models.region import Region
 from app.models.indicator import IndicatorDefinition, RegionIndicatorValue
-from sqlmodel import select
+from app.models.region import Region
 
 logger = logging.getLogger("etl.import_destatis")
 logging.basicConfig(level=logging.INFO)
@@ -146,10 +146,8 @@ DEFAULT_INDICATOR_SPECS: list[GenesisIndicatorSpec] = [
 
 def _credential_payload() -> dict[str, str] | None:
     # Backward compatibility: genesis_api_key kann als username/password identisch genutzt werden.
-    username = (
-        settings.genesis_username or settings.genesis_api_key or "").strip()
-    password = (
-        settings.genesis_password or settings.genesis_api_key or "").strip()
+    username = (settings.genesis_username or settings.genesis_api_key or "").strip()
+    password = (settings.genesis_password or settings.genesis_api_key or "").strip()
     if not username or not password:
         return None
     return {"username": username, "password": password}
@@ -183,10 +181,10 @@ def _load_specs() -> list[GenesisIndicatorSpec]:
                 table_code=item["table_code"],
                 source_name=item.get("source_name", "Destatis GENESIS"),
                 source_url=item.get(
-                    "source_url", "https://www-genesis.destatis.de/datenbank/online#modal=web-service-api"
+                    "source_url",
+                    "https://www-genesis.destatis.de/datenbank/online#modal=web-service-api",
                 ),
-                methodology=item.get(
-                    "methodology", "Regionalwert je Kreis aus GENESIS Tabelle."),
+                methodology=item.get("methodology", "Regionalwert je Kreis aus GENESIS Tabelle."),
                 normalization_mode=item.get("normalization_mode", "log"),
                 ars_column=item.get("ars_column"),
                 value_column=item.get("value_column"),
@@ -232,11 +230,9 @@ def _call_logincheck(auth: dict[str, str]) -> None:
     }
     headers = _credential_headers(auth)
     try:
-        request = Request(
-            f"{logincheck_url}?{urlencode(params)}", headers=headers, method="GET")
+        request = Request(f"{logincheck_url}?{urlencode(params)}", headers=headers, method="GET")
         with urlopen(request, timeout=settings.genesis_connect_timeout_seconds) as response:
-            logger.info("GENESIS logincheck status=%s url=%s",
-                        response.status, logincheck_url)
+            logger.info("GENESIS logincheck status=%s url=%s", response.status, logincheck_url)
     except Exception as exc:
         logger.warning("GENESIS logincheck failed: %s", exc)
 
@@ -246,8 +242,7 @@ def _extract_error_detail(response: httpx.Response) -> tuple[str | None, str]:
     error_code: str | None = None
     try:
         data = response.json()
-        error_code = str(data.get("Code") or data.get(
-            "Status", {}).get("Code") or "")
+        error_code = str(data.get("Code") or data.get("Status", {}).get("Code") or "")
         detail = (
             f"Code={data.get('Code') or data.get('Status', {}).get('Code')} "
             f"Type={data.get('Type') or data.get('Status', {}).get('Type')} "
@@ -277,8 +272,7 @@ def _post_form(
 ) -> httpx.Response:
     encoded = urlencode(data).encode("utf-8")
     request = Request(url, data=encoded, headers=headers, method="POST")
-    status_code, response_headers, body = _open_request(
-        request, timeout_seconds)
+    status_code, response_headers, body = _open_request(request, timeout_seconds)
     return httpx.Response(status_code=status_code, headers=response_headers, content=body)
 
 
@@ -316,8 +310,7 @@ def _list_jobs(auth: dict[str, str]) -> list[dict[str, str]]:
         timeout_seconds=max(settings.genesis_connect_timeout_seconds, 60.0),
     )
     if response.status_code >= 400:
-        raise RuntimeError(
-            f"HTTP {response.status_code} beim Abruf der GENESIS-Jobliste.")
+        raise RuntimeError(f"HTTP {response.status_code} beim Abruf der GENESIS-Jobliste.")
     data = response.json()
     if str(data.get("Status", {}).get("Code", "")) not in {"0", ""}:
         raise RuntimeError(
@@ -343,7 +336,8 @@ def _download_resultfile(job_name: str, auth: dict[str, str]) -> str:
     )
     if response.status_code >= 400:
         raise RuntimeError(
-            f"HTTP {response.status_code} beim Abruf des GENESIS-Resultfiles {job_name}.")
+            f"HTTP {response.status_code} beim Abruf des GENESIS-Resultfiles {job_name}."
+        )
     if "application/json" in (response.headers.get("content-type", "")):
         data = response.json()
         raise RuntimeError(
@@ -365,8 +359,7 @@ def _fetch_table_csv_via_job(spec: GenesisIndicatorSpec, auth: dict[str, str]) -
         payload.update(spec.params)
 
     headers = _credential_headers(auth)
-    job_url = settings.genesis_api_url.replace(
-        "/data/table", "/data/tablefile")
+    job_url = settings.genesis_api_url.replace("/data/table", "/data/tablefile")
     response = _post_form(
         url=job_url,
         data=payload,
@@ -375,11 +368,13 @@ def _fetch_table_csv_via_job(spec: GenesisIndicatorSpec, auth: dict[str, str]) -
     )
     if response.status_code >= 400:
         raise RuntimeError(
-            f"HTTP {response.status_code} beim Start des GENESIS-Jobs fuer {spec.table_code}.")
+            f"HTTP {response.status_code} beim Start des GENESIS-Jobs fuer {spec.table_code}."
+        )
     job_name = _job_name_from_response(response)
     if not job_name:
         raise RuntimeError(
-            f"GENESIS-Jobname fuer Tabelle {spec.table_code} konnte nicht ermittelt werden.")
+            f"GENESIS-Jobname fuer Tabelle {spec.table_code} konnte nicht ermittelt werden."
+        )
 
     max_polls = 36
     poll_interval_seconds = 10
@@ -393,7 +388,8 @@ def _fetch_table_csv_via_job(spec: GenesisIndicatorSpec, auth: dict[str, str]) -
                 return _download_resultfile(job_name, auth)
             if state in {"fehler", "abgebrochen"}:
                 raise RuntimeError(
-                    f"GENESIS-Job {job_name} fuer Tabelle {spec.table_code} endete mit Status {job.get('State')}.")
+                    f"GENESIS-Job {job_name} fuer Tabelle {spec.table_code} endete mit Status {job.get('State')}."
+                )
             break
         time.sleep(poll_interval_seconds)
 
@@ -439,8 +435,12 @@ def _fetch_table_csv(spec: GenesisIndicatorSpec, auth: dict[str, str]) -> str:
                 headers=headers,
                 timeout_seconds=timeout_seconds,
             )
-            logger.info("GENESIS POST status=%s table=%s url=%s",
-                        response.status_code, spec.table_code, settings.genesis_api_url)
+            logger.info(
+                "GENESIS POST status=%s table=%s url=%s",
+                response.status_code,
+                spec.table_code,
+                settings.genesis_api_url,
+            )
             if response.status_code == 401:
                 response = _post_form(
                     url=settings.genesis_api_url,
@@ -521,8 +521,7 @@ def _fetch_table_csv(spec: GenesisIndicatorSpec, auth: dict[str, str]) -> str:
     if "application/json" in ctype and text.strip().startswith("{"):
         data = response.json()
         if data.get("Type") == "ERROR":
-            raise RuntimeError(
-                f"GENESIS Fehler {data.get('Code')}: {data.get('Content')}")
+            raise RuntimeError(f"GENESIS Fehler {data.get('Code')}: {data.get('Content')}")
         status = data.get("Status", {})
         if status.get("Code", 0) in (98, "98"):
             return _fetch_table_csv_via_job(spec, auth)
@@ -534,8 +533,7 @@ def _fetch_table_csv(spec: GenesisIndicatorSpec, auth: dict[str, str]) -> str:
         content = obj.get("Content")
         if isinstance(content, str) and content.strip():
             return content
-        raise RuntimeError(
-            "GENESIS lieferte keine CSV-Inhalte fuer die angefragte Tabelle.")
+        raise RuntimeError("GENESIS lieferte keine CSV-Inhalte fuer die angefragte Tabelle.")
     return text
 
 
@@ -551,12 +549,7 @@ def _to_float(value: str) -> float | None:
 
 def _normalize_text(value: str) -> str:
     normalized = value.strip().lower()
-    return (
-        normalized.replace("ä", "ae")
-        .replace("ö", "oe")
-        .replace("ü", "ue")
-        .replace("ß", "ss")
-    )
+    return normalized.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
 
 
 def _normalize_destatis_region_code(raw_code: str, region_type: str | None = None) -> str | None:
@@ -597,8 +590,7 @@ def _parse_population_rows(content: str) -> list[tuple[str, dict[str, float]]]:
             if value is None:
                 continue
             gender_code = row[11]
-            bucket = grouped.setdefault(
-                ars, {"total": None, "male": None, "female": None})
+            bucket = grouped.setdefault(ars, {"total": None, "male": None, "female": None})
             if gender_code == "GESM":
                 bucket["male"] = value
             elif gender_code == "GESW":
@@ -615,14 +607,15 @@ def _parse_population_rows(content: str) -> list[tuple[str, dict[str, float]]]:
                 },
             )
             for ars, values in grouped.items()
-            if values["total"] is not None and values["male"] is not None and values["female"] is not None
+            if values["total"] is not None
+            and values["male"] is not None
+            and values["female"] is not None
         ]
 
     for row in rows:
         if len(row) < 5 or not row[0].isdigit():
             continue
-        ars = _normalize_destatis_region_code(
-            row[0], "KREISF" if len(row[0]) == 5 else "GEMEIN")
+        ars = _normalize_destatis_region_code(row[0], "KREISF" if len(row[0]) == 5 else "GEMEIN")
         if ars is None:
             continue
         total = _to_float(row[2])
@@ -667,8 +660,7 @@ def _parse_age_rows(content: str) -> dict[str, dict[str, float]]:
     for row in rows:
         if len(row) < 7 or not row[1].isdigit():
             continue
-        ars = _normalize_destatis_region_code(
-            row[1], "KREISF" if len(row[1]) == 5 else "GEMEIN")
+        ars = _normalize_destatis_region_code(row[1], "KREISF" if len(row[1]) == 5 else "GEMEIN")
         if ars is None:
             continue
         age_label = _normalize_text(row[3])
@@ -710,11 +702,9 @@ def _parse_genesis_content(spec: GenesisIndicatorSpec, content: str) -> list[tup
             if total is None or total <= 0:
                 continue
             if spec.parser_strategy == "gemeinde_age_share_u18":
-                share_base = sum(values.get(label, 0.0)
-                                 for label in youth_labels)
+                share_base = sum(values.get(label, 0.0) for label in youth_labels)
             else:
-                share_base = sum(values.get(label, 0.0)
-                                 for label in senior_labels)
+                share_base = sum(values.get(label, 0.0) for label in senior_labels)
             parsed.append((ars, (share_base / total) * 100.0))
         return parsed
 
@@ -726,12 +716,14 @@ def _backfill_region_population(
     region_by_ars: dict[str, int],
     mapped: list[tuple[int, float]],
 ) -> int:
-    values_by_region_id = {region_id: raw for region_id, raw in mapped}
+    values_by_region_id = dict(mapped)
     if not values_by_region_id:
         return 0
 
     updated = 0
-    for region in session.exec(select(Region).where(Region.id.in_(list(values_by_region_id.keys())))):
+    for region in session.exec(
+        select(Region).where(Region.id.in_(list(values_by_region_id.keys())))
+    ):
         raw_value = values_by_region_id.get(region.id)
         if raw_value is None:
             continue
@@ -757,8 +749,7 @@ def main() -> None:
         with with_session() as cleanup_session:
             for legacy_key in ["population_density", "population_young_ratio"]:
                 legacy = cleanup_session.exec(
-                    select(IndicatorDefinition).where(
-                        IndicatorDefinition.key == legacy_key)
+                    select(IndicatorDefinition).where(IndicatorDefinition.key == legacy_key)
                 ).first()
                 if legacy:
                     cleanup_session.exec(
@@ -767,8 +758,9 @@ def main() -> None:
                             RegionIndicatorValue.period == settings.default_score_period,
                         )
                     )
-                    cleanup_session.exec(delete(IndicatorDefinition).where(
-                        IndicatorDefinition.id == legacy.id))
+                    cleanup_session.exec(
+                        delete(IndicatorDefinition).where(IndicatorDefinition.id == legacy.id)
+                    )
                     cleanup_session.commit()
                     logger.info("Legacy-Indicator entfernt: %s", legacy_key)
 
@@ -782,8 +774,7 @@ def main() -> None:
 
         specs = _load_specs()
         if not specs:
-            logger.warning(
-                "Keine Destatis-Indikator-Spezifikation vorhanden. Kein Write.")
+            logger.warning("Keine Destatis-Indikator-Spezifikation vorhanden. Kein Write.")
             return
         _validate_endpoint_for_specs(specs)
 
@@ -799,8 +790,9 @@ def main() -> None:
                         spec.table_code,
                         tuple(sorted((spec.params or {}).items())),
                     )
-                    logger.info("Lade Destatis-Indikator %s aus Tabelle %s",
-                                spec.key, spec.table_code)
+                    logger.info(
+                        "Lade Destatis-Indikator %s aus Tabelle %s", spec.key, spec.table_code
+                    )
                     content = content_cache.get(cache_key)
                     if content is None:
                         content = _fetch_table_csv(spec, auth)
@@ -808,9 +800,12 @@ def main() -> None:
                     rows = _parse_genesis_content(spec, content)
                 except GenesisRequestLimitError as exc:
                     logger.warning(
-                        "Destatis-Tabelle %s (%s) fehlgeschlagen: %s", spec.table_code, spec.key, exc)
-                    cooldown_seconds = max(
-                        settings.genesis_limit_cooldown_seconds, 0)
+                        "Destatis-Tabelle %s (%s) fehlgeschlagen: %s",
+                        spec.table_code,
+                        spec.key,
+                        exc,
+                    )
+                    cooldown_seconds = max(settings.genesis_limit_cooldown_seconds, 0)
                     if cooldown_seconds > 0:
                         logger.warning(
                             "GENESIS request limit aktiv. Warte %s Sekunden vor Abbruch des Imports.",
@@ -824,7 +819,11 @@ def main() -> None:
                     return
                 except Exception as exc:
                     logger.warning(
-                        "Destatis-Tabelle %s (%s) fehlgeschlagen: %s", spec.table_code, spec.key, exc)
+                        "Destatis-Tabelle %s (%s) fehlgeschlagen: %s",
+                        spec.table_code,
+                        spec.key,
+                        exc,
+                    )
                     continue
 
                 indicator = get_or_create_indicator(
@@ -867,9 +866,11 @@ def main() -> None:
                 )
 
                 raw_values = [value for _, value in mapped]
-                normalized_values = normalize(raw_values, spec.direction, mode=spec.normalization_mode)
+                normalized_values = normalize(
+                    raw_values, spec.direction, mode=spec.normalization_mode
+                )
 
-                for (region_id, raw), norm in zip(mapped, normalized_values):
+                for (region_id, raw), norm in zip(mapped, normalized_values, strict=True):
                     upsert_region_indicator_value(
                         session,
                         region_id=region_id,
@@ -881,8 +882,7 @@ def main() -> None:
                     )
 
                 if spec.key == "population_total_destatis":
-                    updated_regions = _backfill_region_population(
-                        session, region_by_ars, mapped)
+                    updated_regions = _backfill_region_population(session, region_by_ars, mapped)
                     if updated_regions:
                         logger.info(
                             "Region.population aus Destatis-Fallback aktualisiert: %s Regionen",
@@ -901,8 +901,7 @@ def main() -> None:
             if written == 0:
                 logger.warning("Kein Destatis-Indikator erfolgreich geladen.")
             else:
-                logger.info(
-                    "Destatis/GENESIS-Import abgeschlossen (%s Indikatoren)", written)
+                logger.info("Destatis/GENESIS-Import abgeschlossen (%s Indikatoren)", written)
 
 
 if __name__ == "__main__":

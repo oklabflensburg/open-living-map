@@ -36,9 +36,7 @@ def build_reason(category_scores: dict[str, float], preferences: RecommendationI
         return "Alle Gewichte waren 0, daher ergibt sich ein neutraler Gesamtscore von 0."
 
     highest_weight = max(positive_weights.values())
-    emphasized_keys = [
-        key for key, weight in positive_weights.items() if weight == highest_weight
-    ]
+    emphasized_keys = [key for key, weight in positive_weights.items() if weight == highest_weight]
     emphasized_labels = [CATEGORY_LABELS.get(key, key) for key in emphasized_keys]
 
     contribution_denominator = sum(positive_weights.values())
@@ -48,7 +46,11 @@ def build_reason(category_scores: dict[str, float], preferences: RecommendationI
     }
     strongest_key = max(
         contribution_map,
-        key=lambda key: (contribution_map[key], category_scores.get(key, 0.0), positive_weights[key]),
+        key=lambda key: (
+            contribution_map[key],
+            category_scores.get(key, 0.0),
+            positive_weights[key],
+        ),
     )
     strongest_label = CATEGORY_LABELS.get(strongest_key, strongest_key)
     strongest_contribution = contribution_map[strongest_key]

@@ -23,7 +23,9 @@ def upgrade() -> None:
     inspector = inspect(bind)
 
     snapshot_columns = {column["name"] for column in inspector.get_columns("region_score_snapshot")}
-    preference_columns = {column["name"] for column in inspector.get_columns("user_preference_session")}
+    preference_columns = {
+        column["name"] for column in inspector.get_columns("user_preference_session")
+    }
 
     if "score_oepnv" not in snapshot_columns:
         op.add_column(

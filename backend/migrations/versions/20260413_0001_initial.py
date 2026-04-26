@@ -53,7 +53,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("key"),
     )
-    op.create_index(op.f("ix_indicator_definition_key"), "indicator_definition", ["key"], unique=False)
+    op.create_index(
+        op.f("ix_indicator_definition_key"), "indicator_definition", ["key"], unique=False
+    )
 
     op.create_table(
         "user_preference_session",
@@ -85,10 +87,20 @@ def upgrade() -> None:
         sa.UniqueConstraint("region_id", "indicator_id", "period"),
     )
     op.create_index(
-        op.f("ix_region_indicator_value_indicator_id"), "region_indicator_value", ["indicator_id"], unique=False
+        op.f("ix_region_indicator_value_indicator_id"),
+        "region_indicator_value",
+        ["indicator_id"],
+        unique=False,
     )
-    op.create_index(op.f("ix_region_indicator_value_period"), "region_indicator_value", ["period"], unique=False)
-    op.create_index(op.f("ix_region_indicator_value_region_id"), "region_indicator_value", ["region_id"], unique=False)
+    op.create_index(
+        op.f("ix_region_indicator_value_period"), "region_indicator_value", ["period"], unique=False
+    )
+    op.create_index(
+        op.f("ix_region_indicator_value_region_id"),
+        "region_indicator_value",
+        ["region_id"],
+        unique=False,
+    )
 
     op.create_table(
         "region_score_snapshot",
@@ -109,11 +121,21 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("region_id", "profile_key", "period"),
     )
-    op.create_index(op.f("ix_region_score_snapshot_period"), "region_score_snapshot", ["period"], unique=False)
     op.create_index(
-        op.f("ix_region_score_snapshot_profile_key"), "region_score_snapshot", ["profile_key"], unique=False
+        op.f("ix_region_score_snapshot_period"), "region_score_snapshot", ["period"], unique=False
     )
-    op.create_index(op.f("ix_region_score_snapshot_region_id"), "region_score_snapshot", ["region_id"], unique=False)
+    op.create_index(
+        op.f("ix_region_score_snapshot_profile_key"),
+        "region_score_snapshot",
+        ["profile_key"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_region_score_snapshot_region_id"),
+        "region_score_snapshot",
+        ["region_id"],
+        unique=False,
+    )
 
     op.execute("CREATE SCHEMA IF NOT EXISTS osm")
 
@@ -151,7 +173,9 @@ def downgrade() -> None:
 
     op.drop_index(op.f("ix_region_indicator_value_region_id"), table_name="region_indicator_value")
     op.drop_index(op.f("ix_region_indicator_value_period"), table_name="region_indicator_value")
-    op.drop_index(op.f("ix_region_indicator_value_indicator_id"), table_name="region_indicator_value")
+    op.drop_index(
+        op.f("ix_region_indicator_value_indicator_id"), table_name="region_indicator_value"
+    )
     op.drop_table("region_indicator_value")
 
     op.drop_table("user_preference_session")

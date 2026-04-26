@@ -1,7 +1,6 @@
 import re
 import unicodedata
 
-
 ARS_LENGTH = 12
 AGS_LENGTH = 8
 DISTRICT_CODE_LENGTH = 5
@@ -98,15 +97,14 @@ def slugify_region_name(
     if simplified_state and simplified_state in simplified_name:
         normalized_state = ""
     if normalized_district_type and normalized_district.lower().startswith(
-            normalized_district_type.lower()
+        normalized_district_type.lower()
     ):
         normalized_district_type = ""
     combined = (
-        f"{normalized} {normalized_district_type} "
-        f"{normalized_district} {normalized_state}"
+        f"{normalized} {normalized_district_type} {normalized_district} {normalized_state}"
     ).strip()
 
-    if remark != '' and remark == "kreisfrei":
+    if remark != "" and remark == "kreisfrei":
         combined = f"{normalized} {normalized_state}".strip()
 
     ascii_name = combined.encode("ascii", "ignore").decode("ascii")

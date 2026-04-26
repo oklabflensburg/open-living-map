@@ -2,9 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from app.core.db import get_session
-from app.schemas.recommendation import (
-    RecommendationInput, RecommendationResponse
-)
+from app.schemas.recommendation import RecommendationInput, RecommendationResponse
 from app.services.scoring import ScoringService
 
 router = APIRouter(tags=["compare"])
@@ -12,10 +10,7 @@ router = APIRouter(tags=["compare"])
 
 @router.get("/compare", response_model=RecommendationResponse)
 def compare(
-    ars: str = Query(
-        ...,
-        description="Kommagetrennte AGS-Codes (Route ist ARS-kompatibel)"
-    ),
+    ars: str = Query(..., description="Kommagetrennte AGS-Codes (Route ist ARS-kompatibel)"),
     session: Session = Depends(get_session),
 ) -> RecommendationResponse:
     ars_list = [item.strip() for item in ars.split(",") if item.strip()][:3]

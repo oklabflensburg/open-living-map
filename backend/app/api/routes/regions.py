@@ -5,9 +5,7 @@ from sqlmodel import Session
 
 from app.core.db import get_session
 from app.repositories.region_repository import RegionRepository
-from app.schemas.region import (
-    RegionBase, RegionDetailResponse, RegionListResponse
-)
+from app.schemas.region import RegionBase, RegionDetailResponse, RegionListResponse
 from app.services.regions import RegionService
 
 router = APIRouter(tags=["regions"])
@@ -17,19 +15,18 @@ logger = logging.getLogger(__name__)
 @router.get("/regions", response_model=RegionListResponse)
 def list_regions(
     q: str | None = Query(
-        default=None,
-        description="Search query for region name, AGS or postal code"),
+        default=None, description="Search query for region name, AGS or postal code"
+    ),
     state_code: str | None = Query(
-        default=None,
-        pattern=r"^\d{2}$",
-        description="Filter by state code"),
+        default=None, pattern=r"^\d{2}$", description="Filter by state code"
+    ),
     limit: int = Query(
-        default=100, ge=1, le=1000,
+        default=100,
+        ge=1,
+        le=1000,
         description="Maximum number of results",
     ),
-    offset: int = Query(
-        default=0, ge=0,
-        description="Offset for pagination"),
+    offset: int = Query(default=0, ge=0, description="Offset for pagination"),
     session: Session = Depends(get_session),
 ) -> RegionListResponse:
     """List regions with optional search, filtering and pagination.
@@ -54,9 +51,7 @@ def list_regions(
         limit=limit,
         offset=offset,
     )
-    return RegionListResponse(
-        items=[RegionBase.model_validate(region) for region in regions]
-    )
+    return RegionListResponse(items=[RegionBase.model_validate(region) for region in regions])
 
 
 @router.get("/regions/state-boundaries")
@@ -69,10 +64,7 @@ def get_state_boundaries(
 
 
 @router.get("/regions/{ars}", response_model=RegionDetailResponse)
-def get_region(
-    ars: str,
-    session: Session = Depends(get_session)
-) -> RegionDetailResponse:
+def get_region(ars: str, session: Session = Depends(get_session)) -> RegionDetailResponse:
     service = RegionService(session)
     detail = service.get_region_detail(ars)
     if detail is None:
@@ -93,9 +85,7 @@ def get_region_amenity_pois(
 
 @router.get("/regions/{ars}/accidents/{category}")
 def get_region_accident_pois(
-    ars: str,
-    category: str,
-    session: Session = Depends(get_session)
+    ars: str, category: str, session: Session = Depends(get_session)
 ) -> dict:
     service = RegionService(session)
     geojson = service.get_region_accident_pois(ars, category)
@@ -111,7 +101,8 @@ def search_regions_autocomplete(
         min_length=2,
         description="""
         Search query for region name, AGS or postal code (minimum 2 characters)
-        """),
+        """,
+    ),
     limit: int = Query(
         default=20,
         ge=1,
@@ -123,6 +114,4 @@ def search_regions_autocomplete(
     """Search regions for autocomplete with debounced frontend requests."""
     repository = RegionRepository(session)
     regions = repository.list_regions(search_query=q, limit=limit)
-    return RegionListResponse(
-        items=[RegionBase.model_validate(region) for region in regions]
-    )
+    return RegionListResponse(items=[RegionBase.model_validate(region) for region in regions])

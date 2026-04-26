@@ -94,7 +94,9 @@ class RegionService:
                 count_total=count_total,
                 per_10k=per_10k,
             )
-            for category, count_total, per_10k in self.repository.list_amenity_aggregates(region.ars)
+            for category, count_total, per_10k in self.repository.list_amenity_aggregates(
+                region.ars
+            )
         ]
         accident_stats = [
             AccidentStat(
@@ -116,7 +118,9 @@ class RegionService:
             AirStationInfo(
                 indicator_key=indicator_key,
                 label=AIR_INDICATOR_LABELS.get(indicator_key, indicator_key),
-                raw_value=indicator_values.get(indicator_key).raw_value if indicator_values.get(indicator_key) else None,
+                raw_value=indicator_values.get(indicator_key).raw_value
+                if indicator_values.get(indicator_key)
+                else None,
                 station_id=station_id,
                 station_code=station_code,
                 station_name=station_name,
@@ -125,22 +129,26 @@ class RegionService:
                 station_page_url=station_page_url,
                 measures_url=measures_url,
             )
-            for indicator_key, station_id, station_code, station_name, latitude, longitude, station_page_url, measures_url
-            in self.repository.list_air_stations(region.ars)
+            for indicator_key, station_id, station_code, station_name, latitude, longitude, station_page_url, measures_url in self.repository.list_air_stations(
+                region.ars
+            )
         ]
         climate_stations = [
             ClimateStationInfo(
                 indicator_key=indicator_key,
                 label=CLIMATE_INDICATOR_LABELS.get(indicator_key, indicator_key),
-                raw_value=indicator_values.get(indicator_key).raw_value if indicator_values.get(indicator_key) else None,
+                raw_value=indicator_values.get(indicator_key).raw_value
+                if indicator_values.get(indicator_key)
+                else None,
                 station_id=station_id,
                 station_name=station_name,
                 latitude=latitude,
                 longitude=longitude,
                 source_url=source_url,
             )
-            for indicator_key, station_id, station_name, latitude, longitude, source_url
-            in self.repository.list_climate_stations(region.ars)
+            for indicator_key, station_id, station_name, latitude, longitude, source_url in self.repository.list_climate_stations(
+                region.ars
+            )
         ]
         land_use_stat_row = self.repository.get_land_use_stat(region.ars)
         land_use_stat = (

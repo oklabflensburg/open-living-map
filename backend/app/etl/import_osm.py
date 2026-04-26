@@ -3,8 +3,8 @@ import os
 import subprocess
 from pathlib import Path
 
-from sqlalchemy.engine import make_url
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
 from app.core.config import settings
 from app.core.db import engine
@@ -78,11 +78,7 @@ CATEGORY_WEIGHTS = {
 TOTAL_CATEGORY_WEIGHT = sum(CATEGORY_WEIGHTS.values())
 
 OSM_TAG_COLUMNS = sorted(
-    {
-        osm_key
-        for mappings in CATEGORY_MAPPING.values()
-        for osm_key, _ in mappings
-    }
+    {osm_key for mappings in CATEGORY_MAPPING.values() for osm_key, _ in mappings}
 )
 
 
@@ -213,7 +209,9 @@ def _source_tables_ready() -> bool:
     return bool(planet_point_exists and planet_polygon_exists and boundary_exists)
 
 
-def _build_stage_scan_queries(table_name: str, alias: str, geom_sql: str) -> tuple[list[str], dict[str, str]]:
+def _build_stage_scan_queries(
+    table_name: str, alias: str, geom_sql: str
+) -> tuple[list[str], dict[str, str]]:
     grouped_by_key: dict[str, dict[str, set[str]]] = {}
     for category, mappings in CATEGORY_MAPPING.items():
         for osm_key, osm_value in mappings:
@@ -304,7 +302,7 @@ def rebuild_osm_stage_tables() -> None:
                     name,
                     geom
                 FROM (
-                    {' UNION ALL '.join(point_scan_queries)}
+                    {" UNION ALL ".join(point_scan_queries)}
                 ) staged
                 WHERE geom IS NOT NULL
                 ORDER BY category, poi_id, (name IS NULL), name DESC
@@ -325,7 +323,7 @@ def rebuild_osm_stage_tables() -> None:
                     name,
                     geom
                 FROM (
-                    {' UNION ALL '.join(polygon_scan_queries)}
+                    {" UNION ALL ".join(polygon_scan_queries)}
                 ) staged
                 WHERE geom IS NOT NULL
                 ORDER BY category, poi_id, (name IS NULL), name DESC
@@ -381,7 +379,9 @@ def build_real_amenity_aggregation() -> bool:
                 """
             )
         )
-        rows_written = connection.execute(text("SELECT COUNT(*) FROM osm.region_amenity_agg")).scalar() or 0
+        rows_written = (
+            connection.execute(text("SELECT COUNT(*) FROM osm.region_amenity_agg")).scalar() or 0
+        )
     logger.info("OSM POI-Aggregation geschrieben: %s Gemeinde/Kategorie-Zeilen", rows_written)
     return int(rows_written) > 0
 
@@ -413,7 +413,11 @@ def maybe_run_osm2pgsql(osm_path: Path | None) -> None:
                 """
             )
         ).scalar()
-    if existing_import and os.environ.get("OSM_FORCE_IMPORT", "").lower() not in {"1", "true", "yes"}:
+    if existing_import and os.environ.get("OSM_FORCE_IMPORT", "").lower() not in {
+        "1",
+        "true",
+        "yes",
+    }:
         logger.info(
             "OSM-Rohimport uebersprungen: osm.planet_osm_point und osm.planet_osm_polygon existieren bereits. "
             "Setze OSM_FORCE_IMPORT=1 fuer einen Neuimport."
@@ -494,7 +498,7 @@ def build_amenities_indicator() -> None:
                 GROUP BY r.id
                 """
             ),
-            {"total_category_weight": TOTAL_CATEGORY_WEIGHT}
+            {"total_category_weight": TOTAL_CATEGORY_WEIGHT},
         ).all()
         if not rows:
             logger.warning("Keine OSM-Aggregation gefunden, amenities wird nicht geschrieben.")
@@ -503,9 +507,13 @@ def build_amenities_indicator() -> None:
         raw_values = [float(row.amenities_raw) for row in rows]
         category_counts = [int(row.category_count) for row in rows]
         density_scores = normalize(raw_values, indicator.direction, mode="log")
-        breadth_scores = normalize([float(count) for count in category_counts], indicator.direction, mode="linear")
+        breadth_scores = normalize(
+            [float(count) for count in category_counts], indicator.direction, mode="linear"
+        )
 
-        for row, density_score, breadth_score in zip(rows, density_scores, breadth_scores):
+        for row, density_score, breadth_score in zip(
+            rows, density_scores, breadth_scores, strict=True
+        ):
             norm = round((density_score * 0.75) + (breadth_score * 0.25), 2)
             quality_flag = "ok" if int(row.category_count) >= 5 else "low_coverage"
             upsert_region_indicator_value(
@@ -524,7 +532,10 @@ def main() -> None:
     with tracked_etl_run(
         job_name="import_osm",
         sources=[
-            {"source_name": "Geofabrik Germany PBF", "source_url": settings.geofabrik_germany_pbf_url},
+            {
+                "source_name": "Geofabrik Germany PBF",
+                "source_url": settings.geofabrik_germany_pbf_url,
+            },
         ],
     ) as run:
         osm_path = maybe_download_geofabrik()

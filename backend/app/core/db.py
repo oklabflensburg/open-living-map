@@ -28,10 +28,10 @@ def check_indicator_schema_drift() -> bool:
     """Check if indicator_definition table has expected columns.
     Returns True if schema matches expectations, False if drift detected."""
     column_names = _get_column_names("indicator_definition")
-    
+
     expected_columns = {"normalization_mode"}
     missing = expected_columns - column_names
-    
+
     if missing:
         logger.warning(
             f"Schema drift detected in indicator_definition: missing columns {missing}. "
@@ -58,10 +58,10 @@ def check_score_schema_drift() -> bool:
         "coverage_oepnv",
     }
     expected_pref = {"landuse_weight", "created_at"}
-    
+
     missing_snapshot = expected_snapshot - snapshot_names
     missing_pref = expected_pref - pref_names
-    
+
     if missing_snapshot or missing_pref:
         logger.warning(
             f"Schema drift detected in score tables: "
@@ -77,17 +77,24 @@ def check_region_schema_drift() -> bool:
     """Check if region table has expected columns.
     Returns True if schema matches expectations, False if drift detected."""
     column_names = _get_column_names("region")
-    
-    expected_columns = {"bem", "slug", "district_name", "wikidata_id", "wikidata_url", "wikipedia_url"}
+
+    expected_columns = {
+        "bem",
+        "slug",
+        "district_name",
+        "wikidata_id",
+        "wikidata_url",
+        "wikipedia_url",
+    }
     missing = expected_columns - column_names
-    
+
     if missing:
         logger.warning(
             f"Schema drift detected in region: missing columns {missing}. "
             f"Run alembic migrations to fix."
         )
         return False
-    
+
     # Check for empty slugs that need population
     with Session(engine) as session:
         rows = session.execute(
@@ -99,13 +106,12 @@ def check_region_schema_drift() -> bool:
                 """
             )
         ).scalar()
-        
+
         if rows and rows > 0:
             logger.warning(
-                f"Found {rows} regions with empty slugs. "
-                f"Run data migration to populate slugs."
+                f"Found {rows} regions with empty slugs. Run data migration to populate slugs."
             )
-    
+
     return True
 
 

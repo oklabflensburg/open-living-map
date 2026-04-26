@@ -7,7 +7,13 @@ from sqlmodel import select
 
 from app.core.ars import normalize_ars
 from app.core.config import settings
-from app.etl.common import clear_indicator_values, get_or_create_indicator, normalize, tracked_etl_run, with_session
+from app.etl.common import (
+    clear_indicator_values,
+    get_or_create_indicator,
+    normalize,
+    tracked_etl_run,
+    with_session,
+)
 from app.models.indicator import RegionIndicatorValue
 from app.models.region import Region
 
@@ -73,7 +79,7 @@ def _batch_write_indicator_values(
         )
     }
 
-    for (region_id, raw_value), normalized_value in zip(values, normalized_values):
+    for (region_id, raw_value), normalized_value in zip(values, normalized_values, strict=True):
         existing = existing_rows.get(region_id)
         if existing:
             existing.raw_value = round(raw_value, 4)
@@ -174,37 +180,37 @@ def main() -> None:
             }
 
             indicator_specs = [
-            (
-                "forest_share_pct",
-                "forest_share_pct",
-                "Waldanteil",
-                "higher_is_better",
-            ),
-            (
-                "settlement_transport_share_pct",
-                "settlement_transport_share_pct",
-                "Siedlungs- und Verkehrsflächenanteil",
-                "lower_is_better",
-            ),
-            (
-                "agriculture_share_pct",
-                "agriculture_share_pct",
-                "Landwirtschaftsanteil",
-                "higher_is_better",
-            ),
-            (
-                "transport_share_pct",
-                "transport_share_pct",
-                "Verkehrsflächenanteil",
-                "lower_is_better",
-            ),
-            (
-                "settlement_transport_sqm_per_capita",
-                "settlement_transport_sqm_per_capita",
-                "Siedlungs- und Verkehrsfläche je Einwohner",
-                "lower_is_better",
-            ),
-        ]
+                (
+                    "forest_share_pct",
+                    "forest_share_pct",
+                    "Waldanteil",
+                    "higher_is_better",
+                ),
+                (
+                    "settlement_transport_share_pct",
+                    "settlement_transport_share_pct",
+                    "Siedlungs- und Verkehrsflächenanteil",
+                    "lower_is_better",
+                ),
+                (
+                    "agriculture_share_pct",
+                    "agriculture_share_pct",
+                    "Landwirtschaftsanteil",
+                    "higher_is_better",
+                ),
+                (
+                    "transport_share_pct",
+                    "transport_share_pct",
+                    "Verkehrsflächenanteil",
+                    "lower_is_better",
+                ),
+                (
+                    "settlement_transport_sqm_per_capita",
+                    "settlement_transport_sqm_per_capita",
+                    "Siedlungs- und Verkehrsfläche je Einwohner",
+                    "lower_is_better",
+                ),
+            ]
 
             source_url = "https://service.destatis.de/DE/karten/flaechenatlas2019daten.xlsx"
             methodology = (
@@ -219,7 +225,9 @@ def main() -> None:
                     key=indicator_key,
                     name=indicator_name,
                     category="landuse",
-                    unit="sqm_per_capita" if field_name == "settlement_transport_sqm_per_capita" else "percent",
+                    unit="sqm_per_capita"
+                    if field_name == "settlement_transport_sqm_per_capita"
+                    else "percent",
                     direction=direction,
                     normalization_mode="robust_percentile",
                     source_name="Destatis Flächenatlas 2019",

@@ -151,9 +151,7 @@ class ScoringService:
         return AMENITY_LABELS.get(category, category)
 
     @staticmethod
-    def apply_preset_weights(
-        preferences: RecommendationInput
-    ) -> RecommendationInput:
+    def apply_preset_weights(preferences: RecommendationInput) -> RecommendationInput:
         if preferences.preset is None:
             return preferences
         preset_weights = PRESET_WEIGHTS.get(preferences.preset)
@@ -170,8 +168,7 @@ class ScoringService:
         if coverage is None:
             return weighted_keys
 
-        covered_keys = [
-            key for key in weighted_keys if coverage.get(key, 0.0) > 0]
+        covered_keys = [key for key in weighted_keys if coverage.get(key, 0.0) > 0]
         return covered_keys or weighted_keys
 
     @staticmethod
@@ -200,16 +197,16 @@ class ScoringService:
         if not category_scores:
             return 0.0
         return round(
-            sum(
-                category_scores[key] * coverage.get(key, 0.0)
-                for key in category_scores
-            ) / len(category_scores),
+            sum(category_scores[key] * coverage.get(key, 0.0) for key in category_scores)
+            / len(category_scores),
             2,
         )
 
     @staticmethod
     def _nationwide_candidate_limit(limit: int) -> int:
-        return max(limit, NATIONWIDE_CANDIDATE_POOL_MIN, limit * NATIONWIDE_CANDIDATE_POOL_MULTIPLIER)
+        return max(
+            limit, NATIONWIDE_CANDIDATE_POOL_MIN, limit * NATIONWIDE_CANDIDATE_POOL_MULTIPLIER
+        )
 
     @staticmethod
     def _nationwide_state_cap(limit: int) -> int:
@@ -264,8 +261,7 @@ class ScoringService:
             "landuse": preferences.landuse_weight,
             "oepnv": preferences.oepnv_weight,
         }
-        effective_keys = ScoringService._effective_weight_keys(
-            weights, coverage)
+        effective_keys = ScoringService._effective_weight_keys(weights, coverage)
         denominator = sum(
             weights[key] * (coverage.get(key, 1.0) if coverage is not None else 1.0)
             for key in effective_keys
@@ -285,8 +281,7 @@ class ScoringService:
         if preferences.preset == URBAN_PRESET_KEY:
             urbanity_score = ScoringService.urbanity_score(population)
             score = (
-                score * (1.0 - URBANITY_BLEND_WEIGHT)
-                + urbanity_score * URBANITY_BLEND_WEIGHT
+                score * (1.0 - URBANITY_BLEND_WEIGHT) + urbanity_score * URBANITY_BLEND_WEIGHT
             ) * ScoringService._coverage_confidence(weights, coverage)
         return round(score, 2)
 
@@ -309,24 +304,21 @@ class ScoringService:
         state_code: str | None = None,
     ) -> RecommendationInput:
         weights = {
-            'climate_weight': 0,
-            'air_weight': 0,
-            'safety_weight': 0,
-            'demographics_weight': 0,
-            'amenities_weight': 0,
-            'landuse_weight': 0,
-            'oepnv_weight': 0,
+            "climate_weight": 0,
+            "air_weight": 0,
+            "safety_weight": 0,
+            "demographics_weight": 0,
+            "amenities_weight": 0,
+            "landuse_weight": 0,
+            "oepnv_weight": 0,
         }
-        weight_key = f'{category}_weight'
+        weight_key = f"{category}_weight"
         if weight_key not in weights:
-            raise ValueError(f'Unknown category: {category}')
+            raise ValueError(f"Unknown category: {category}")
         weights[weight_key] = 5
         return RecommendationInput(**weights, state_code=state_code)
 
-    def _persist_preference_session(
-        self,
-        preferences: RecommendationInput
-    ) -> None:
+    def _persist_preference_session(self, preferences: RecommendationInput) -> None:
         """Persist user preference session for analytics.
 
         Note: This is disabled by default for privacy reasons. Enable only
@@ -334,6 +326,7 @@ class ScoringService:
         """
         # Check if persistence is enabled via environment variable
         import os
+
         if os.environ.get("ENABLE_PREFERENCE_PERSISTENCE", "false").lower() != "true":
             return
 
@@ -364,6 +357,7 @@ class ScoringService:
         # If not, we should add one in a migration
         try:
             from app.models.preference import UserPreferenceSession
+
             stmt = delete(UserPreferenceSession).where(
                 UserPreferenceSession.created_at < cutoff_date
             )
@@ -372,6 +366,7 @@ class ScoringService:
         except Exception as e:
             # Log but don't fail if cleanup doesn't work
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to cleanup old preference sessions: {e}")
 
@@ -407,7 +402,9 @@ class ScoringService:
     def localized_quality_flag(flag: str) -> str:
         return QUALITY_FLAG_LABELS.get(flag, flag)
 
-    def _indicator_text(self, key: str, raw_value: float, normalized_value: float, unit: str) -> str:
+    def _indicator_text(
+        self, key: str, raw_value: float, normalized_value: float, unit: str
+    ) -> str:
         label = self.localized_indicator_name(key)
         formatted = self._format_value(raw_value, unit)
         localized_unit = self.localized_unit(unit)
@@ -422,14 +419,12 @@ class ScoringService:
             details.append(
                 RecommendationIndicatorDetail(
                     key=definition.key,
-                    name=self.localized_indicator_name(
-                        definition.key, definition.name),
+                    name=self.localized_indicator_name(definition.key, definition.name),
                     category=definition.category,
                     unit=definition.unit,
                     raw_value=value.raw_value,
                     normalized_value=value.normalized_value,
-                    quality_flag=self.localized_quality_flag(
-                        value.quality_flag),
+                    quality_flag=self.localized_quality_flag(value.quality_flag),
                     source_name=definition.source_name,
                     updated_at=value.updated_at.isoformat() if value.updated_at else None,
                     text=self._indicator_text(
@@ -555,13 +550,17 @@ class ScoringService:
 
         by_key = {item.key: item for item in indicators}
         population_indicator = by_key.get("population_total_destatis")
-        population_value = float(region_population) if region_population is not None else (
-            population_indicator.raw_value if population_indicator else None
+        population_value = (
+            float(region_population)
+            if region_population is not None
+            else (population_indicator.raw_value if population_indicator else None)
         )
         female_share = by_key.get("female_share_destatis")
         youth_share = by_key.get("youth_share_destatis")
         senior_share = by_key.get("senior_share_destatis")
-        if region_level == "gemeinde" and not any([population_indicator, female_share, youth_share, senior_share]):
+        if region_level == "gemeinde" and not any(
+            [population_indicator, female_share, youth_share, senior_share]
+        ):
             details.append(
                 "Demografie-Indikatoren für diese Gemeinde sind aktuell nicht geladen. "
                 "Sobald der Regionalstatistik-Import auf Gemeindeebene erfolgreich läuft, erscheinen hier echte Werte."
@@ -569,25 +568,31 @@ class ScoringService:
         if population_value is not None:
             if region_level == "gemeinde" and region_population is not None:
                 details.append(
-                    f"Einwohner laut Gemeindedatensatz: {self._format_value(population_value, 'count')}.")
+                    f"Einwohner laut Gemeindedatensatz: {self._format_value(population_value, 'count')}."
+                )
             elif region_population is not None:
                 details.append(
-                    f"Einwohner laut Regionsdatensatz: {self._format_value(population_value, 'count')}.")
+                    f"Einwohner laut Regionsdatensatz: {self._format_value(population_value, 'count')}."
+                )
             else:
                 details.append(
-                    f"Einwohner laut Destatis-Indikator: {self._format_value(population_value, 'count')}.")
+                    f"Einwohner laut Destatis-Indikator: {self._format_value(population_value, 'count')}."
+                )
         if female_share:
             label = "Frauenanteil laut Destatis-Indikator"
             details.append(
-                f"{label}: {self._format_value(female_share.raw_value, female_share.unit)}.")
+                f"{label}: {self._format_value(female_share.raw_value, female_share.unit)}."
+            )
         if youth_share:
             label = "Anteil unter 18 Jahren laut Destatis-Indikator"
             details.append(
-                f"{label}: {self._format_value(youth_share.raw_value, youth_share.unit)}.")
+                f"{label}: {self._format_value(youth_share.raw_value, youth_share.unit)}."
+            )
         if senior_share:
             label = "Anteil ab 65 Jahren laut Destatis-Indikator"
             details.append(
-                f"{label}: {self._format_value(senior_share.raw_value, senior_share.unit)}.")
+                f"{label}: {self._format_value(senior_share.raw_value, senior_share.unit)}."
+            )
 
         amenities = by_key.get("amenities_density")
         if amenities:
@@ -597,8 +602,7 @@ class ScoringService:
                     f"{ScoringService.amenity_label(category)}: {count_total} gesamt, {per_10k:.2f} je 10.000 Einwohner"
                     for category, count_total, per_10k in amenity_rows
                 ]
-                details.append("OSM-Alltagsnähe nach Kategorien: " +
-                               "; ".join(amenity_parts) + ".")
+                details.append("OSM-Alltagsnähe nach Kategorien: " + "; ".join(amenity_parts) + ".")
             else:
                 details.append(
                     "Alltagsnähe basiert aktuell auf der aggregierten OSM-POI-Dichte. "
@@ -618,9 +622,7 @@ class ScoringService:
         coverage: dict[str, float],
         preferences: RecommendationInput,
     ) -> tuple[str, list[str], list[RecommendationIndicatorDetail]]:
-        indicators = self._build_indicator_details(
-            self.repository.list_indicator_values(region_id)
-        )
+        indicators = self._build_indicator_details(self.repository.list_indicator_values(region_id))
         score_formula, calculation_details = self._build_calculation_details(
             ars=ars,
             region_level=region_level,
@@ -651,9 +653,7 @@ class ScoringService:
             )
         else:
             repository_limit = (
-                self._nationwide_candidate_limit(limit)
-                if preferences.state_code is None
-                else limit
+                self._nationwide_candidate_limit(limit) if preferences.state_code is None else limit
             )
             rows = self.repository.list_ranked_snapshots_by_preferences(
                 weights=weights,
@@ -738,8 +738,7 @@ class ScoringService:
             return RecommendationResponse(items=items)
 
         item_by_ars = {item.ars: item for item in items}
-        region_by_ars = {region.ars: region for region,
-                         _ in rows if region.ars in item_by_ars}
+        region_by_ars = {region.ars: region for region, _ in rows if region.ars in item_by_ars}
         indicator_rows_by_region = self.repository.list_indicator_values_for_regions(
             [region.id for region in region_by_ars.values() if region.id is not None]
         )
@@ -841,7 +840,9 @@ class ScoringService:
                     coverage_amenities=coverage["amenities"],
                     coverage_landuse=coverage["landuse"],
                     coverage_oepnv=coverage["oepnv"],
-                    trust_updated_at=snapshot.updated_at.isoformat() if snapshot.updated_at else None,
+                    trust_updated_at=snapshot.updated_at.isoformat()
+                    if snapshot.updated_at
+                    else None,
                     reason=build_reason(category_scores, preferences),
                 )
             )
@@ -854,10 +855,8 @@ class ScoringService:
         for item in items:
             region = region_by_ars[item.ars]
             indicator_rows = indicator_rows_by_region.get(int(region.id), [])
-            freshness_by_category = self.build_category_freshness_summary(
-                indicator_rows)
-            quality_by_category = self.build_category_quality_summary(
-                indicator_rows)
+            freshness_by_category = self.build_category_freshness_summary(indicator_rows)
+            quality_by_category = self.build_category_quality_summary(indicator_rows)
             freshness = freshness_by_category.get(category, {})
             quality = quality_by_category.get(category, {})
             if freshness.get("updated_at"):
