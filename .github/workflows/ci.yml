@@ -39,6 +39,11 @@ jobs:
       run: |
         cd backend
         pip install -e .
+
+    - name: Prepare backend env
+      run: |
+        cd backend
+        cp .env.example .env
     
     - name: Lint with ruff
       run: |
